@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import * as d3 from "d3";
 import { LiveTransaction } from "../hooks/useLiveTransactions";
 import { Card, CardContent, CardHeader, CardTitle } from "./ui/card";
@@ -36,9 +36,9 @@ const RANGE_CONFIG: Record<TimeRange, { label: string; ms: number; interval: "1m
 const BUCKET_MS = 5 * 60 * 1000;
 const WHALE_THRESHOLD = 100;
 const MIN_VISIBLE_WHALE_MARKER = 15;
-const CHART_W = 1000;
-const PRICE_H = 320;
-const SERIES_H = 250;
+const FALLBACK_W = 1000;
+const FALLBACK_PRICE_H = 320;
+const FALLBACK_SERIES_H = 250;
 const PAD_TOP = 16;
 const PAD_RIGHT = 16;
 const PAD_BOTTOM = 24;
@@ -81,6 +81,26 @@ const formatValue = (value: number) => {
     return `${(value / 1_000).toFixed(1)}K`;
   }
   return value.toFixed(2);
+};
+
+const toPctChange = (current: number, previous: number) => {
+  if (!Number.isFinite(current) || !Number.isFinite(previous)) {
+    return null;
+  }
+  if (Math.abs(previous) < 1e-9) {
+    return null;
+  }
+  return ((current - previous) / Math.abs(previous)) * 100;
+};
+
+const movementStyle = (pct: number | null) => {
+  if (pct === null || Math.abs(pct) < 0.05) {
+    return { symbol: "■", className: "text-muted-foreground", text: "n/a" };
+  }
+  if (pct > 0) {
+    return { symbol: "▲", className: "text-success", text: `+${pct.toFixed(1)}%` };
+  }
+  return { symbol: "▼", className: "text-destructive", text: `${pct.toFixed(1)}%` };
 };
 
 const isExchangeLike = (wallet: string) => {
@@ -153,18 +173,48 @@ async function fetchPriceCandles(range: TimeRange): Promise<PriceCandle[]> {
   return [...deduped.values()].sort((a, b) => a.ts - b.ts);
 }
 
+function useElementSize<T extends HTMLElement>() {
+  const ref = useRef<T | null>(null);
+  const [size, setSize] = useState({ width: 0, height: 0 });
+
+  useEffect(() => {
+    const node = ref.current;
+    if (!node) return;
+
+    const observer = new ResizeObserver((entries) => {
+      const rect = entries[0]?.contentRect;
+      if (!rect) return;
+      setSize({
+        width: Math.max(1, Math.round(rect.width)),
+        height: Math.max(1, Math.round(rect.height)),
+      });
+    });
+
+    observer.observe(node);
+    return () => observer.disconnect();
+  }, []);
+
+  return [ref, size] as const;
+}
+
 function PriceImpactD3Chart({
   candles,
   whaleMarkers,
   inflowSpikes,
   outflowSpikes,
+  width,
+  height,
 }: {
   candles: PriceCandle[];
   whaleMarkers: Array<{ ts: number; value: number }>;
   inflowSpikes: number[];
   outflowSpikes: number[];
+  width: number;
+  height: number;
 }) {
   const [hover, setHover] = useState<PriceCandle | null>(null);
+  const W = Math.max(320, width || FALLBACK_W);
+  const H = Math.max(220, height || FALLBACK_PRICE_H);
 
   const minTs = candles[0]?.ts ?? Date.now() - 1;
   const maxTs = candles.at(-1)?.ts ?? Date.now();
@@ -177,16 +227,16 @@ function PriceImpactD3Chart({
       d3
         .scaleTime<number, number>()
         .domain([new Date(minTs), new Date(maxTs)])
-        .range([PAD_LEFT, CHART_W - PAD_RIGHT]),
-    [minTs, maxTs],
+        .range([PAD_LEFT, W - PAD_RIGHT]),
+    [minTs, maxTs, W],
   );
   const yScale = useMemo(
     () =>
       d3
         .scaleLinear()
         .domain([minClose - yPad, maxClose + yPad])
-        .range([PRICE_H - PAD_BOTTOM, PAD_TOP]),
-    [maxClose, minClose, yPad],
+        .range([H - PAD_BOTTOM, PAD_TOP]),
+    [maxClose, minClose, yPad, H],
   );
 
   const linePath = useMemo(
@@ -204,11 +254,11 @@ function PriceImpactD3Chart({
 
   return (
     <svg
-      viewBox={`0 0 ${CHART_W} ${PRICE_H}`}
+      viewBox={`0 0 ${W} ${H}`}
       className="w-full h-full"
       onMouseMove={(event) => {
         const rect = (event.currentTarget as SVGSVGElement).getBoundingClientRect();
-        const px = ((event.clientX - rect.left) / Math.max(rect.width, 1)) * CHART_W;
+        const px = ((event.clientX - rect.left) / Math.max(rect.width, 1)) * W;
         const ts = +xScale.invert(px);
         if (candles.length === 0) {
           setHover(null);
@@ -225,11 +275,11 @@ function PriceImpactD3Chart({
             x1={xScale(t)}
             y1={PAD_TOP}
             x2={xScale(t)}
-            y2={PRICE_H - PAD_BOTTOM}
+            y2={H - PAD_BOTTOM}
             stroke="#334155"
             opacity="0.18"
           />
-          <text x={xScale(t)} y={PRICE_H - 6} textAnchor="middle" fontSize="10" fill="#64748B">
+          <text x={xScale(t)} y={H - 6} textAnchor="middle" fontSize="10" fill="#64748B">
             {formatShortTime(+t)}
           </text>
         </g>
@@ -239,7 +289,7 @@ function PriceImpactD3Chart({
           <line
             x1={PAD_LEFT}
             y1={yScale(t)}
-            x2={CHART_W - PAD_RIGHT}
+            x2={W - PAD_RIGHT}
             y2={yScale(t)}
             stroke="#334155"
             opacity="0.16"
@@ -289,24 +339,16 @@ function PriceImpactD3Chart({
             x1={xScale(new Date(hover.ts))}
             y1={PAD_TOP}
             x2={xScale(new Date(hover.ts))}
-            y2={PRICE_H - PAD_BOTTOM}
+            y2={H - PAD_BOTTOM}
             stroke="#94A3B8"
             strokeDasharray="4 4"
             opacity="0.7"
           />
-          <rect
-            x={CHART_W - 188}
-            y={10}
-            width={176}
-            height={44}
-            rx={6}
-            fill="#0F172A"
-            opacity="0.85"
-          />
-          <text x={CHART_W - 178} y={28} fill="#E2E8F0" fontSize="11">
+          <rect x={W - 188} y={10} width={176} height={44} rx={6} fill="#0F172A" opacity="0.85" />
+          <text x={W - 178} y={28} fill="#E2E8F0" fontSize="11">
             {new Date(hover.ts).toLocaleString()}
           </text>
-          <text x={CHART_W - 178} y={44} fill="#93C5FD" fontSize="11">
+          <text x={W - 178} y={44} fill="#93C5FD" fontSize="11">
             ETH ${hover.close.toFixed(2)}
           </text>
         </>
@@ -315,35 +357,46 @@ function PriceImpactD3Chart({
   );
 }
 
-function NetFlowD3Chart({ points }: { points: BucketPoint[] }) {
+function NetFlowD3Chart({
+  points,
+  width,
+  height,
+}: {
+  points: BucketPoint[];
+  width: number;
+  height: number;
+}) {
   const [hover, setHover] = useState<BucketPoint | null>(null);
+  const W = Math.max(320, width || FALLBACK_W);
+  const H = Math.max(200, height || FALLBACK_SERIES_H);
+
   const minTs = points[0]?.ts ?? Date.now() - 1;
   const maxTs = points.at(-1)?.ts ?? Date.now();
   const maxAbs = Math.max(
     1,
     d3.max(points, (p) => Math.max(p.inflow, p.outflow, Math.abs(p.netFlow))) ?? 1,
   );
-  const barW = Math.max(2, ((CHART_W - PAD_LEFT - PAD_RIGHT) / Math.max(points.length, 1)) * 0.68);
+  const barW = Math.max(2, ((W - PAD_LEFT - PAD_RIGHT) / Math.max(points.length, 1)) * 0.68);
 
   const xScale = useMemo(
     () =>
       d3
         .scaleTime<number, number>()
         .domain([new Date(minTs), new Date(maxTs)])
-        .range([PAD_LEFT, CHART_W - PAD_RIGHT]),
-    [minTs, maxTs],
+        .range([PAD_LEFT, W - PAD_RIGHT]),
+    [minTs, maxTs, W],
   );
   const yScale = useMemo(
     () =>
       d3
         .scaleLinear()
         .domain([-maxAbs, maxAbs])
-        .range([SERIES_H - PAD_BOTTOM, PAD_TOP]),
-    [maxAbs],
+        .range([H - PAD_BOTTOM, PAD_TOP]),
+    [maxAbs, H],
   );
+
   const xTicks = xScale.ticks(6);
   const yTicks = yScale.ticks(5);
-
   const netPath = useMemo(
     () =>
       d3
@@ -356,11 +409,11 @@ function NetFlowD3Chart({ points }: { points: BucketPoint[] }) {
 
   return (
     <svg
-      viewBox={`0 0 ${CHART_W} ${SERIES_H}`}
+      viewBox={`0 0 ${W} ${H}`}
       className="w-full h-full"
       onMouseMove={(event) => {
         const rect = (event.currentTarget as SVGSVGElement).getBoundingClientRect();
-        const px = ((event.clientX - rect.left) / Math.max(rect.width, 1)) * CHART_W;
+        const px = ((event.clientX - rect.left) / Math.max(rect.width, 1)) * W;
         const ts = +xScale.invert(px);
         const idx = d3.bisector((d: BucketPoint) => d.ts).center(points, ts);
         setHover(points[Math.max(0, Math.min(idx, points.length - 1))] ?? null);
@@ -373,11 +426,11 @@ function NetFlowD3Chart({ points }: { points: BucketPoint[] }) {
             x1={xScale(t)}
             y1={PAD_TOP}
             x2={xScale(t)}
-            y2={SERIES_H - PAD_BOTTOM}
+            y2={H - PAD_BOTTOM}
             stroke="#334155"
             opacity="0.16"
           />
-          <text x={xScale(t)} y={SERIES_H - 6} textAnchor="middle" fontSize="10" fill="#64748B">
+          <text x={xScale(t)} y={H - 6} textAnchor="middle" fontSize="10" fill="#64748B">
             {formatShortTime(+t)}
           </text>
         </g>
@@ -387,7 +440,7 @@ function NetFlowD3Chart({ points }: { points: BucketPoint[] }) {
           <line
             x1={PAD_LEFT}
             y1={yScale(t)}
-            x2={CHART_W - PAD_RIGHT}
+            x2={W - PAD_RIGHT}
             y2={yScale(t)}
             stroke="#334155"
             opacity="0.16"
@@ -399,7 +452,7 @@ function NetFlowD3Chart({ points }: { points: BucketPoint[] }) {
       ))}
       <line
         x1={PAD_LEFT}
-        x2={CHART_W - PAD_RIGHT}
+        x2={W - PAD_RIGHT}
         y1={yScale(0)}
         y2={yScale(0)}
         stroke="#94A3B8"
@@ -435,30 +488,22 @@ function NetFlowD3Chart({ points }: { points: BucketPoint[] }) {
             x1={xScale(new Date(hover.ts))}
             y1={PAD_TOP}
             x2={xScale(new Date(hover.ts))}
-            y2={SERIES_H - PAD_BOTTOM}
+            y2={H - PAD_BOTTOM}
             stroke="#94A3B8"
             strokeDasharray="4 4"
             opacity="0.7"
           />
-          <rect
-            x={CHART_W - 194}
-            y={10}
-            width={182}
-            height={58}
-            rx={6}
-            fill="#0F172A"
-            opacity="0.85"
-          />
-          <text x={CHART_W - 184} y={28} fill="#E2E8F0" fontSize="11">
+          <rect x={W - 194} y={10} width={182} height={58} rx={6} fill="#0F172A" opacity="0.85" />
+          <text x={W - 184} y={28} fill="#E2E8F0" fontSize="11">
             {new Date(hover.ts).toLocaleString()}
           </text>
-          <text x={CHART_W - 184} y={44} fill="#22C55E" fontSize="11">
+          <text x={W - 184} y={44} fill="#22C55E" fontSize="11">
             In {formatValue(hover.inflow)}
           </text>
-          <text x={CHART_W - 118} y={44} fill="#EF4444" fontSize="11">
+          <text x={W - 118} y={44} fill="#EF4444" fontSize="11">
             Out {formatValue(hover.outflow)}
           </text>
-          <text x={CHART_W - 184} y={60} fill="#93C5FD" fontSize="11">
+          <text x={W - 184} y={60} fill="#93C5FD" fontSize="11">
             Net {formatValue(hover.netFlow)}
           </text>
         </>
@@ -467,21 +512,32 @@ function NetFlowD3Chart({ points }: { points: BucketPoint[] }) {
   );
 }
 
-function WhaleD3Chart({ points }: { points: BucketPoint[] }) {
+function WhaleD3Chart({
+  points,
+  width,
+  height,
+}: {
+  points: BucketPoint[];
+  width: number;
+  height: number;
+}) {
   const [hover, setHover] = useState<BucketPoint | null>(null);
+  const W = Math.max(320, width || FALLBACK_W);
+  const H = Math.max(200, height || FALLBACK_SERIES_H);
+
   const minTs = points[0]?.ts ?? Date.now() - 1;
   const maxTs = points.at(-1)?.ts ?? Date.now();
   const maxVol = d3.max(points, (p) => p.whaleVolume) ?? 1;
   const maxCount = d3.max(points, (p) => p.whaleTxCount) ?? 1;
-  const barW = Math.max(2, ((CHART_W - PAD_LEFT - PAD_RIGHT) / Math.max(points.length, 1)) * 0.68);
+  const barW = Math.max(2, ((W - PAD_LEFT - PAD_RIGHT) / Math.max(points.length, 1)) * 0.68);
 
   const xScale = useMemo(
     () =>
       d3
         .scaleTime<number, number>()
         .domain([new Date(minTs), new Date(maxTs)])
-        .range([PAD_LEFT, CHART_W - PAD_RIGHT]),
-    [minTs, maxTs],
+        .range([PAD_LEFT, W - PAD_RIGHT]),
+    [minTs, maxTs, W],
   );
   const yVol = useMemo(
     () =>
@@ -489,8 +545,8 @@ function WhaleD3Chart({ points }: { points: BucketPoint[] }) {
         .scaleLinear()
         .domain([0, maxVol])
         .nice()
-        .range([SERIES_H - PAD_BOTTOM, PAD_TOP]),
-    [maxVol],
+        .range([H - PAD_BOTTOM, PAD_TOP]),
+    [maxVol, H],
   );
   const yCount = useMemo(
     () =>
@@ -498,9 +554,11 @@ function WhaleD3Chart({ points }: { points: BucketPoint[] }) {
         .scaleLinear()
         .domain([0, maxCount])
         .nice()
-        .range([SERIES_H - PAD_BOTTOM, PAD_TOP]),
-    [maxCount],
+        .range([H - PAD_BOTTOM, PAD_TOP]),
+    [maxCount, H],
   );
+  const xTicks = xScale.ticks(6);
+  const yTicks = yVol.ticks(5);
 
   const countPath = useMemo(
     () =>
@@ -514,17 +572,48 @@ function WhaleD3Chart({ points }: { points: BucketPoint[] }) {
 
   return (
     <svg
-      viewBox={`0 0 ${CHART_W} ${SERIES_H}`}
+      viewBox={`0 0 ${W} ${H}`}
       className="w-full h-full"
       onMouseMove={(event) => {
         const rect = (event.currentTarget as SVGSVGElement).getBoundingClientRect();
-        const px = ((event.clientX - rect.left) / Math.max(rect.width, 1)) * CHART_W;
+        const px = ((event.clientX - rect.left) / Math.max(rect.width, 1)) * W;
         const ts = +xScale.invert(px);
         const idx = d3.bisector((d: BucketPoint) => d.ts).center(points, ts);
         setHover(points[Math.max(0, Math.min(idx, points.length - 1))] ?? null);
       }}
       onMouseLeave={() => setHover(null)}
     >
+      {xTicks.map((t, i) => (
+        <g key={`x-${i}`}>
+          <line
+            x1={xScale(t)}
+            y1={PAD_TOP}
+            x2={xScale(t)}
+            y2={H - PAD_BOTTOM}
+            stroke="#334155"
+            opacity="0.16"
+          />
+          <text x={xScale(t)} y={H - 6} textAnchor="middle" fontSize="10" fill="#64748B">
+            {formatShortTime(+t)}
+          </text>
+        </g>
+      ))}
+      {yTicks.map((t, i) => (
+        <g key={`y-${i}`}>
+          <line
+            x1={PAD_LEFT}
+            y1={yVol(t)}
+            x2={W - PAD_RIGHT}
+            y2={yVol(t)}
+            stroke="#334155"
+            opacity="0.16"
+          />
+          <text x={4} y={yVol(t) + 3} fontSize="10" fill="#64748B">
+            {Math.round(t)}
+          </text>
+        </g>
+      ))}
+
       {points.map((p, i) => (
         <rect
           key={`bar-${i}`}
@@ -544,27 +633,19 @@ function WhaleD3Chart({ points }: { points: BucketPoint[] }) {
             x1={xScale(new Date(hover.ts))}
             y1={PAD_TOP}
             x2={xScale(new Date(hover.ts))}
-            y2={SERIES_H - PAD_BOTTOM}
+            y2={H - PAD_BOTTOM}
             stroke="#94A3B8"
             strokeDasharray="4 4"
             opacity="0.7"
           />
-          <rect
-            x={CHART_W - 198}
-            y={10}
-            width={186}
-            height={56}
-            rx={6}
-            fill="#0F172A"
-            opacity="0.85"
-          />
-          <text x={CHART_W - 188} y={28} fill="#E2E8F0" fontSize="11">
+          <rect x={W - 198} y={10} width={186} height={56} rx={6} fill="#0F172A" opacity="0.85" />
+          <text x={W - 188} y={28} fill="#E2E8F0" fontSize="11">
             {new Date(hover.ts).toLocaleString()}
           </text>
-          <text x={CHART_W - 188} y={44} fill="#93C5FD" fontSize="11">
+          <text x={W - 188} y={44} fill="#93C5FD" fontSize="11">
             Volume {formatValue(hover.whaleVolume)}
           </text>
-          <text x={CHART_W - 188} y={60} fill="#FCD34D" fontSize="11">
+          <text x={W - 188} y={60} fill="#FCD34D" fontSize="11">
             Count {hover.whaleTxCount}
           </text>
         </>
@@ -574,6 +655,10 @@ function WhaleD3Chart({ points }: { points: BucketPoint[] }) {
 }
 
 export function ImpactPage({ transactions }: ImpactPageProps) {
+  const [priceRef, priceSize] = useElementSize<HTMLDivElement>();
+  const [flowRef, flowSize] = useElementSize<HTMLDivElement>();
+  const [whaleRef, whaleSize] = useElementSize<HTMLDivElement>();
+
   const [range, setRange] = useState<TimeRange>("24h");
   const [candles, setCandles] = useState<PriceCandle[]>([]);
   const [loading, setLoading] = useState(false);
@@ -585,9 +670,7 @@ export function ImpactPage({ transactions }: ImpactPageProps) {
     setLoadError(null);
     fetchPriceCandles(range)
       .then((next) => {
-        if (active) {
-          setCandles(next);
-        }
+        if (active) setCandles(next);
       })
       .catch(() => {
         if (active) {
@@ -596,9 +679,7 @@ export function ImpactPage({ transactions }: ImpactPageProps) {
         }
       })
       .finally(() => {
-        if (active) {
-          setLoading(false);
-        }
+        if (active) setLoading(false);
       });
     return () => {
       active = false;
@@ -639,9 +720,7 @@ export function ImpactPage({ transactions }: ImpactPageProps) {
     for (const tx of visibleTx) {
       const bucketTs = Math.floor(tx.timestampMs / BUCKET_MS) * BUCKET_MS;
       const current = byBucket.get(bucketTs);
-      if (!current) {
-        continue;
-      }
+      if (!current) continue;
 
       const amount = parseAmount(tx.amount);
       const toExchange = isExchangeLike(tx.to);
@@ -676,20 +755,47 @@ export function ImpactPage({ transactions }: ImpactPageProps) {
   const metrics = useMemo(() => {
     const now = Date.now();
     const lastHour = bucketed.filter((b) => b.ts >= now - 60 * 60 * 1000);
+    const prevHour = bucketed.filter(
+      (b) => b.ts >= now - 2 * 60 * 60 * 1000 && b.ts < now - 60 * 60 * 1000,
+    );
     const last24h = bucketed.filter((b) => b.ts >= now - 24 * 60 * 60 * 1000);
+    const prev24h = bucketed.filter(
+      (b) => b.ts >= now - 48 * 60 * 60 * 1000 && b.ts < now - 24 * 60 * 60 * 1000,
+    );
     const returns24h = last24h.map((b) => b.ret);
+    const prevReturns24h = prev24h.map((b) => b.ret);
     const rollingVol = stdDev(returns24h.slice(-12)) * 100;
+    const prevRollingVol = stdDev(prevReturns24h.slice(-12)) * 100;
     const corr = correlation(
       last24h.map((b) => b.netFlow),
       returns24h,
     );
+    const prevCorr = correlation(
+      prev24h.map((b) => b.netFlow),
+      prevReturns24h,
+    );
+
+    const netExchangeFlow1h = lastHour.reduce((sum, b) => sum + b.netFlow, 0);
+    const prevNetExchangeFlow1h = prevHour.reduce((sum, b) => sum + b.netFlow, 0);
+    const whaleVolume1h = lastHour.reduce((sum, b) => sum + b.whaleVolume, 0);
+    const prevWhaleVolume1h = prevHour.reduce((sum, b) => sum + b.whaleVolume, 0);
+
     return {
-      netExchangeFlow1h: lastHour.reduce((sum, b) => sum + b.netFlow, 0),
-      whaleVolume1h: lastHour.reduce((sum, b) => sum + b.whaleVolume, 0),
+      netExchangeFlow1h,
+      netExchangeFlow1hPct: toPctChange(netExchangeFlow1h, prevNetExchangeFlow1h),
+      whaleVolume1h,
+      whaleVolume1hPct: toPctChange(whaleVolume1h, prevWhaleVolume1h),
       rollingVol,
+      rollingVolPct: toPctChange(rollingVol, prevRollingVol),
       corr,
+      corrPct: toPctChange(corr ?? 0, prevCorr ?? 0),
     };
   }, [bucketed]);
+
+  const netFlowMove = movementStyle(metrics.netExchangeFlow1hPct);
+  const whaleVolMove = movementStyle(metrics.whaleVolume1hPct);
+  const volMove = movementStyle(metrics.rollingVolPct);
+  const corrMove = movementStyle(metrics.corrPct);
 
   const whaleMarkers = useMemo(
     () =>
@@ -723,52 +829,79 @@ export function ImpactPage({ transactions }: ImpactPageProps) {
   return (
     <div className="mt-16 px-3 pb-3 pt-3 space-y-3">
       <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-3">
-        <Card className="bg-card/60 border-border/60">
-          <CardHeader className="pb-3">
-            <CardTitle className="text-xs text-muted-foreground uppercase tracking-[0.12em]">
+        <Card className="bg-card/60 border-border/60 h-[150px]">
+          <CardHeader className="px-4 pt-3 pb-1">
+            <CardTitle className="text-xs text-muted-foreground uppercase tracking-[0.12em] text-center">
               Net Exchange Flow (1H)
             </CardTitle>
           </CardHeader>
-          <CardContent>
+          <CardContent className="flex-1 w-full px-3 pb-3 flex flex-col items-center justify-center text-center gap-2">
             <p
-              className={`text-2xl font-semibold ${
-                metrics.netExchangeFlow1h >= 0 ? "text-success" : "text-destructive"
-              }`}
+              className={`text-4xl font-semibold leading-none ${metrics.netExchangeFlow1h >= 0 ? "text-success" : "text-destructive"}`}
             >
               {metrics.netExchangeFlow1h >= 0 ? "+" : "-"}
               {formatValue(Math.abs(metrics.netExchangeFlow1h))}
             </p>
+            <p
+              className={`text-xs font-medium inline-flex items-center gap-1 ${netFlowMove.className}`}
+            >
+              <span>{netFlowMove.symbol}</span>
+              <span>{netFlowMove.text}</span>
+            </p>
           </CardContent>
         </Card>
-        <Card className="bg-card/60 border-border/60">
-          <CardHeader className="pb-3">
-            <CardTitle className="text-xs text-muted-foreground uppercase tracking-[0.12em]">
+
+        <Card className="bg-card/60 border-border/60 h-[150px]">
+          <CardHeader className="px-4 pt-3 pb-1">
+            <CardTitle className="text-xs text-muted-foreground uppercase tracking-[0.12em] text-center">
               Whale Volume (1H)
             </CardTitle>
           </CardHeader>
-          <CardContent>
-            <p className="text-2xl font-semibold">{formatValue(metrics.whaleVolume1h)}</p>
+          <CardContent className="flex-1 w-full px-3 pb-3 flex flex-col items-center justify-center text-center gap-2">
+            <p className="text-4xl font-semibold leading-none">
+              {formatValue(metrics.whaleVolume1h)}
+            </p>
+            <p
+              className={`text-xs font-medium inline-flex items-center gap-1 ${whaleVolMove.className}`}
+            >
+              <span>{whaleVolMove.symbol}</span>
+              <span>{whaleVolMove.text}</span>
+            </p>
           </CardContent>
         </Card>
-        <Card className="bg-card/60 border-border/60">
-          <CardHeader className="pb-3">
-            <CardTitle className="text-xs text-muted-foreground uppercase tracking-[0.12em]">
+
+        <Card className="bg-card/60 border-border/60 h-[150px]">
+          <CardHeader className="px-4 pt-3 pb-1">
+            <CardTitle className="text-xs text-muted-foreground uppercase tracking-[0.12em] text-center">
               Rolling Volatility
             </CardTitle>
           </CardHeader>
-          <CardContent>
-            <p className="text-2xl font-semibold">{metrics.rollingVol.toFixed(2)}%</p>
+          <CardContent className="flex-1 w-full px-3 pb-3 flex flex-col items-center justify-center text-center gap-2">
+            <p className="text-4xl font-semibold leading-none">{metrics.rollingVol.toFixed(2)}%</p>
+            <p
+              className={`text-xs font-medium inline-flex items-center gap-1 ${volMove.className}`}
+            >
+              <span>{volMove.symbol}</span>
+              <span>{volMove.text}</span>
+            </p>
           </CardContent>
         </Card>
-        <Card className="bg-card/60 border-border/60">
-          <CardHeader className="pb-3">
-            <CardTitle className="text-xs text-muted-foreground uppercase tracking-[0.12em]">
+
+        <Card className="bg-card/60 border-border/60 h-[150px]">
+          <CardHeader className="px-4 pt-3 pb-1">
+            <CardTitle className="text-xs text-muted-foreground uppercase tracking-[0.12em] text-center">
               Corr: Net Flow vs Returns (24H)
             </CardTitle>
           </CardHeader>
-          <CardContent>
-            <p className="text-2xl font-semibold">
+          <CardContent className="flex-1 w-full px-3 pb-3 flex flex-col items-center justify-center text-center gap-2">
+            <p className="text-4xl font-semibold leading-none">
               {metrics.corr === null ? "n/a" : metrics.corr.toFixed(3)}
+            </p>
+            <p
+              className={`text-xs font-medium inline-flex items-center gap-1 ${corrMove.className}`}
+            >
+              <span>{corrMove.symbol}</span>
+              <span>{corrMove.text}</span>
             </p>
           </CardContent>
         </Card>
@@ -792,12 +925,14 @@ export function ImpactPage({ transactions }: ImpactPageProps) {
           </div>
         </CardHeader>
         <CardContent className="flex-1 min-h-0 p-0">
-          <div className="h-full px-4 pb-4">
+          <div ref={priceRef} className="h-full px-4 pb-4">
             <PriceImpactD3Chart
               candles={candles}
               whaleMarkers={whaleMarkers}
               inflowSpikes={spikeData.inflow}
               outflowSpikes={spikeData.outflow}
+              width={priceSize.width}
+              height={priceSize.height}
             />
           </div>
           {(loading || loadError) && (
@@ -814,8 +949,8 @@ export function ImpactPage({ transactions }: ImpactPageProps) {
             <CardTitle>Net Exchange Flow (5m Buckets)</CardTitle>
           </CardHeader>
           <CardContent className="flex-1 min-h-0 p-0">
-            <div className="h-full px-4 pb-4">
-              <NetFlowD3Chart points={bucketed} />
+            <div ref={flowRef} className="h-full px-4 pb-4">
+              <NetFlowD3Chart points={bucketed} width={flowSize.width} height={flowSize.height} />
             </div>
           </CardContent>
         </Card>
@@ -825,8 +960,8 @@ export function ImpactPage({ transactions }: ImpactPageProps) {
             <CardTitle>Whale Activity</CardTitle>
           </CardHeader>
           <CardContent className="flex-1 min-h-0 p-0">
-            <div className="h-full px-4 pb-4">
-              <WhaleD3Chart points={bucketed} />
+            <div ref={whaleRef} className="h-full px-4 pb-4">
+              <WhaleD3Chart points={bucketed} width={whaleSize.width} height={whaleSize.height} />
             </div>
           </CardContent>
         </Card>
