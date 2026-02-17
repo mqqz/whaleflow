@@ -6,8 +6,8 @@ import { TransactionFeed } from "./components/TransactionFeed";
 import { useMemo, useState } from "react";
 import { useLiveTransactions } from "./hooks/useLiveTransactions";
 import { ImpactPage } from "./components/ImpactView";
-import { Card, CardContent, CardHeader, CardTitle } from "./components/ui/card";
 import { TopNavSection } from "./components/TopNavigation";
+import { ExplorerPage } from "./components/ExplorerPage";
 
 export default function App() {
   const IMPACT_HISTORY_SIZE = 600;
@@ -105,16 +105,13 @@ export default function App() {
       {activeSection === "impact" && <ImpactPage transactions={transactions} />}
 
       {activeSection === "explorer" && (
-        <div className="mt-16 px-3 pb-3 pt-3">
-          <Card className="bg-card/60 border-border/60">
-            <CardHeader>
-              <CardTitle>Explorer</CardTitle>
-            </CardHeader>
-            <CardContent className="text-sm text-muted-foreground">
-              Explorer page scaffold is ready. We can wire wallet/tx deep search next.
-            </CardContent>
-          </Card>
-        </div>
+        <ExplorerPage
+          network={network}
+          token={token}
+          transactions={transactions}
+          selectedWallet={selectedWallet}
+          onWalletSelect={setSelectedWallet}
+        />
       )}
     </div>
   );

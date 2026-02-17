@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Search, Activity } from "lucide-react";
+import { Activity } from "lucide-react";
 import { motion } from "motion/react";
 import { ConnectionStatus } from "../hooks/useLiveTransactions";
 import {
@@ -12,7 +12,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from "./ui/select";
-import { Input } from "./ui/input";
 
 interface TopNavigationProps {
   network: string;
@@ -310,15 +309,6 @@ export function TopNavigation({
               )}
             </div>
             <span className="text-xs font-semibold tracking-wider">{statusLabel[status]}</span>
-          </div>
-
-          {/* Search */}
-          <div className="relative">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-            <Input
-              placeholder="Search wallet address..."
-              className="w-[220px] lg:w-[260px] pl-9 bg-secondary/50 border-border/50 hover:bg-secondary/70 focus:bg-secondary transition-colors"
-            />
           </div>
         </div>
       </div>
