@@ -40,11 +40,11 @@ export default function App() {
         onTokenChange={setToken}
       />
 
-      <div className="mt-16 pl-3 pr-0 pb-3 space-y-3">
+      <div className="mt-16 pl-3 pr-0 pb-3 h-[calc(100vh-4rem)]">
         {/* Main Layout */}
-        <div className="flex gap-3">
+        <div className="flex gap-3 h-full">
           {/* Center Content */}
-          <div className="flex-1 flex flex-col gap-3 pt-3">
+          <div className="flex-1 flex flex-col gap-3 pt-3 min-h-0">
             {/* Network Graph */}
             <div className="h-[420px]">
               <NetworkGraph
@@ -56,30 +56,32 @@ export default function App() {
             </div>
 
             {/* Transaction Feed */}
-            <TransactionFeed
-              network={network}
-              token={token}
-              minAmount={minAmount}
-              transactions={transactions}
-              status={status}
-              pauseStream={pauseStream}
-              slowMode={slowMode}
-              onPauseStreamChange={setPauseStream}
-              onSlowModeChange={setSlowMode}
-              controlsOpen={controlsOpen}
-              onControlsOpenChange={setControlsOpen}
-              selectedWallet={selectedWallet}
-              onWalletSelect={setSelectedWallet}
-              controlsPanel={
-                <FeedControlsPanel
-                  token={token}
-                  minAmount={minAmount}
-                  maxVisible={maxVisible}
-                  onMinAmountChange={setMinAmount}
-                  onMaxVisibleChange={setMaxVisible}
-                />
-              }
-            />
+            <div className="flex-1 min-h-0">
+              <TransactionFeed
+                network={network}
+                token={token}
+                minAmount={minAmount}
+                transactions={transactions}
+                status={status}
+                pauseStream={pauseStream}
+                slowMode={slowMode}
+                onPauseStreamChange={setPauseStream}
+                onSlowModeChange={setSlowMode}
+                controlsOpen={controlsOpen}
+                onControlsOpenChange={setControlsOpen}
+                selectedWallet={selectedWallet}
+                onWalletSelect={setSelectedWallet}
+                controlsPanel={
+                  <FeedControlsPanel
+                    token={token}
+                    minAmount={minAmount}
+                    maxVisible={maxVisible}
+                    onMinAmountChange={setMinAmount}
+                    onMaxVisibleChange={setMaxVisible}
+                  />
+                }
+              />
+            </div>
           </div>
 
           {/* Right Sidebar */}

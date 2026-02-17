@@ -100,9 +100,9 @@ export function TransactionFeed({
     : statusUi[status];
 
   return (
-    <div className="bg-card/60 backdrop-blur-sm border-t border-border">
+    <div className="bg-card/60 backdrop-blur-sm border-t border-border h-full rounded-b-xl overflow-hidden">
       <Collapsible open={controlsOpen} onOpenChange={onControlsOpenChange}>
-        <div className="flex flex-col">
+        <div className="flex flex-col h-full min-h-0">
           <div className="flex items-center justify-between px-6 py-3 border-b border-border/50 text-sm">
             <div className="flex items-center gap-2">
               <h3 className="font-semibold text-base">Transaction Feed</h3>
@@ -168,9 +168,9 @@ export function TransactionFeed({
             </CollapsibleContent>
           ) : null}
 
-          <div className="px-6 py-2">
+          <div className="px-6 py-2 flex-1 min-h-0 overflow-y-auto">
             {transactions.length === 0 ? (
-              <div className="h-24 grid place-items-center text-sm text-muted-foreground">
+              <div className="h-full min-h-[220px] grid place-items-center text-sm text-muted-foreground text-center">
                 {statusText[status]}
               </div>
             ) : (

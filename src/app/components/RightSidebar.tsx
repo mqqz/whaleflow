@@ -53,7 +53,7 @@ export function RightSidebar({
   const recentTransactions = walletTransactions.slice(0, 12);
 
   return (
-    <div className="w-[280px] bg-card/60 backdrop-blur-sm border-l border-border p-4 space-y-4">
+    <div className="w-[280px] h-full bg-card/60 backdrop-blur-sm border-l border-border p-4 space-y-4 overflow-y-auto">
       <div className="flex items-center gap-2 pb-2 border-b border-border/50">
         <Wallet className="w-4 h-4 text-primary" />
         <h3 className="font-semibold text-sm">Wallet Details</h3>
@@ -185,7 +185,7 @@ export function RightSidebar({
           </div>
         </>
       ) : (
-        <div className="p-4 bg-secondary/30 rounded-lg border border-border/30 text-sm text-muted-foreground">
+        <div className="p-4 min-h-[220px] grid place-items-center bg-secondary/30 rounded-lg border border-border/30 text-sm text-muted-foreground text-center">
           Select a wallet by clicking a graph node or any `From` / `To` address in the live feed.
         </div>
       )}
