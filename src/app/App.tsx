@@ -14,6 +14,7 @@ export default function App() {
   const [pauseStream, setPauseStream] = useState(false);
   const [slowMode, setSlowMode] = useState(false);
   const [controlsOpen, setControlsOpen] = useState(false);
+  const [selectedWallet, setSelectedWallet] = useState<string | null>(null);
   const { transactions, status } = useLiveTransactions({
     network,
     token,
@@ -46,7 +47,12 @@ export default function App() {
           <div className="flex-1 flex flex-col gap-3 pt-3">
             {/* Network Graph */}
             <div className="h-[420px]">
-              <NetworkGraph network={network} transactions={graphTransactions} />
+              <NetworkGraph
+                network={network}
+                transactions={graphTransactions}
+                selectedWallet={selectedWallet}
+                onWalletSelect={setSelectedWallet}
+              />
             </div>
 
             {/* Transaction Feed */}
@@ -62,6 +68,8 @@ export default function App() {
               onSlowModeChange={setSlowMode}
               controlsOpen={controlsOpen}
               onControlsOpenChange={setControlsOpen}
+              selectedWallet={selectedWallet}
+              onWalletSelect={setSelectedWallet}
               controlsPanel={
                 <FeedControlsPanel
                   token={token}
@@ -75,7 +83,12 @@ export default function App() {
           </div>
 
           {/* Right Sidebar */}
-          <RightSidebar />
+          <RightSidebar
+            token={token}
+            selectedWallet={selectedWallet}
+            transactions={transactions}
+            onWalletSelect={setSelectedWallet}
+          />
         </div>
       </div>
     </div>

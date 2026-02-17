@@ -24,6 +24,8 @@ interface GraphLink {
 interface NetworkGraphProps {
   network: string;
   transactions: LiveTransaction[];
+  selectedWallet: string | null;
+  onWalletSelect: (wallet: string) => void;
 }
 
 const MAX_NODES = 24;
@@ -167,7 +169,12 @@ const linkKey = (d: GraphLink) => {
   return `${source}=>${target}`;
 };
 
-export function NetworkGraph({ network, transactions }: NetworkGraphProps) {
+export function NetworkGraph({
+  network,
+  transactions,
+  selectedWallet,
+  onWalletSelect,
+}: NetworkGraphProps) {
   const svgRef = useRef<SVGSVGElement>(null);
   const [hoveredNode, setHoveredNode] = useState<string | null>(null);
 
@@ -484,7 +491,8 @@ export function NetworkGraph({ network, transactions }: NetworkGraphProps) {
       .select("circle.node-core")
       .attr("r", (d) => Math.sqrt(d.value) / 2 + 8)
       .attr("fill", (d) => getNodeColor(d.type))
-      .attr("stroke", (d) => getNodeColor(d.type));
+      .attr("stroke", (d) => getNodeColor(d.type))
+      .attr("stroke-width", (d) => (d.id === selectedWallet ? 3 : 2));
 
     node
       .select("text")
@@ -508,7 +516,11 @@ export function NetworkGraph({ network, transactions }: NetworkGraphProps) {
         .transition()
         .duration(200)
         .attr("r", (nodeData: any) => Math.sqrt(nodeData.value) / 2 + 8)
-        .attr("stroke-width", 2);
+        .attr("stroke-width", (nodeData: any) => (nodeData.id === selectedWallet ? 3 : 2));
+    });
+
+    node.on("click", function (_event, d) {
+      onWalletSelect(d.id);
     });
 
     node.call(
@@ -592,7 +604,7 @@ export function NetworkGraph({ network, transactions }: NetworkGraphProps) {
     } else {
       simulation.alpha(0.03);
     }
-  }, [graphData]);
+  }, [graphData, onWalletSelect, selectedWallet]);
 
   const hasData = transactions.length > 0;
 
