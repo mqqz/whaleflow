@@ -40,34 +40,34 @@ export default function App() {
         <div className="flex gap-3">
           {/* Center Content */}
           <div className="flex-1 flex flex-col gap-3 pt-3">
-          {/* Network Graph */}
-          <div className="h-[420px]">
-            <NetworkGraph />
-          </div>
+            {/* Network Graph */}
+            <div className="h-[420px]">
+              <NetworkGraph network={network} transactions={transactions} />
+            </div>
 
-          {/* Transaction Feed */}
-          <TransactionFeed
-            network={network}
-            token={token}
-            minAmount={minAmount}
-            transactions={transactions}
-            status={status}
-            pauseStream={pauseStream}
-            slowMode={slowMode}
-            onPauseStreamChange={setPauseStream}
-            onSlowModeChange={setSlowMode}
-            controlsOpen={controlsOpen}
-            onControlsOpenChange={setControlsOpen}
-            controlsPanel={
-              <FeedControlsPanel
-                token={token}
-                minAmount={minAmount}
-                maxVisible={maxVisible}
-                onMinAmountChange={setMinAmount}
-                onMaxVisibleChange={setMaxVisible}
-              />
-            }
-          />
+            {/* Transaction Feed */}
+            <TransactionFeed
+              network={network}
+              token={token}
+              minAmount={minAmount}
+              transactions={transactions}
+              status={status}
+              pauseStream={pauseStream}
+              slowMode={slowMode}
+              onPauseStreamChange={setPauseStream}
+              onSlowModeChange={setSlowMode}
+              controlsOpen={controlsOpen}
+              onControlsOpenChange={setControlsOpen}
+              controlsPanel={
+                <FeedControlsPanel
+                  token={token}
+                  minAmount={minAmount}
+                  maxVisible={maxVisible}
+                  onMinAmountChange={setMinAmount}
+                  onMaxVisibleChange={setMaxVisible}
+                />
+              }
+            />
           </div>
 
           {/* Right Sidebar */}
