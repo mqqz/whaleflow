@@ -3,7 +3,7 @@ import { FeedControlsPanel } from "./components/FeedControlsPanel";
 import { RightSidebar } from "./components/RightSidebar";
 import { NetworkGraph } from "./components/NetworkGraph";
 import { TransactionFeed } from "./components/TransactionFeed";
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { useLiveTransactions } from "./hooks/useLiveTransactions";
 
 export default function App() {
@@ -23,6 +23,10 @@ export default function App() {
     paused: pauseStream,
     flushIntervalMs: slowMode ? 1400 : 800,
   });
+  const graphTransactions = useMemo(
+    () => transactions.filter((tx) => tx.channel === "wallet"),
+    [transactions],
+  );
 
   return (
     <div className="min-h-screen bg-background">
@@ -42,7 +46,7 @@ export default function App() {
           <div className="flex-1 flex flex-col gap-3 pt-3">
             {/* Network Graph */}
             <div className="h-[420px]">
-              <NetworkGraph network={network} transactions={transactions} />
+              <NetworkGraph network={network} transactions={graphTransactions} />
             </div>
 
             {/* Transaction Feed */}

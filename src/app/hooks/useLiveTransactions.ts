@@ -12,6 +12,7 @@ export interface LiveTransaction {
   fee: string;
   block: number;
   timestamp: string;
+  channel: "wallet" | "market";
 }
 
 interface UseLiveTransactionsOptions {
@@ -27,8 +28,8 @@ interface UseLiveTransactionsOptions {
 interface StreamConfig {
   kind: "bitcoin" | "evm" | "binance";
   urls: string[];
-  onOpenPayload: string | null;
-  mapper: (raw: unknown) => LiveTransaction | null;
+  onOpenPayloads: string[];
+  mapper: (raw: unknown) => LiveTransaction[];
   feeUnit?: string;
 }
 
@@ -36,8 +37,11 @@ const MAX_BACKOFF_MS = 15000;
 const MAX_QUEUE_SIZE = 200;
 const WHALE_THRESHOLD = 100;
 const WEI_PER_ETH = 1_000_000_000_000_000_000n;
-const MAX_INFLIGHT_EVM_REQUESTS = 8;
-const EVM_REQUEST_INTERVAL_MS = 200;
+const MAX_INFLIGHT_EVM_REQUESTS = 10;
+const EVM_REQUEST_INTERVAL_MS = 120;
+const BTC_DOMINANT_PARTICIPANTS = 2;
+const BTC_COSPEND_PAIR_REPEAT_THRESHOLD = 2;
+const BTC_COSPEND_WINDOW_PAIR_EVENTS = 4000;
 
 const tokenToSymbol: Record<string, string> = {
   btc: "btcusdt",
@@ -49,10 +53,7 @@ const tokenToSymbol: Record<string, string> = {
 
 const evmNetworkConfig: Record<string, { urls: string[]; feeUnit: string }> = {
   ethereum: {
-    urls: [
-      "wss://ethereum-rpc.publicnode.com",
-      "wss://eth-mainnet.g.alchemy.com/v2/demo",
-    ],
+    urls: ["wss://ethereum-rpc.publicnode.com", "wss://eth-mainnet.g.alchemy.com/v2/demo"],
     feeUnit: "ETH",
   },
   bsc: {
@@ -60,17 +61,11 @@ const evmNetworkConfig: Record<string, { urls: string[]; feeUnit: string }> = {
     feeUnit: "BNB",
   },
   polygon: {
-    urls: [
-      "wss://polygon-bor-rpc.publicnode.com",
-      "wss://polygon-mainnet.g.alchemy.com/v2/demo",
-    ],
+    urls: ["wss://polygon-bor-rpc.publicnode.com", "wss://polygon-mainnet.g.alchemy.com/v2/demo"],
     feeUnit: "MATIC",
   },
   arbitrum: {
-    urls: [
-      "wss://arbitrum-one-rpc.publicnode.com",
-      "wss://arb-mainnet.g.alchemy.com/v2/demo",
-    ],
+    urls: ["wss://arbitrum-one-rpc.publicnode.com", "wss://arb-mainnet.g.alchemy.com/v2/demo"],
     feeUnit: "ETH",
   },
 };
@@ -118,9 +113,9 @@ const formatWei = (wei: bigint, fractionDigits: number): string => {
   return fractionRaw.length > 0 ? `${whole.toString()}.${fractionRaw}` : whole.toString();
 };
 
-const mapBinanceTrade = (raw: unknown): LiveTransaction | null => {
+const mapBinanceTrade = (raw: unknown): LiveTransaction[] => {
   if (!raw || typeof raw !== "object") {
-    return null;
+    return [];
   }
 
   const trade = raw as {
@@ -140,86 +135,205 @@ const mapBinanceTrade = (raw: unknown): LiveTransaction | null => {
     typeof trade.l !== "number" ||
     typeof trade.T !== "number"
   ) {
-    return null;
+    return [];
   }
 
   const quantity = Number.parseFloat(trade.q);
 
   if (!Number.isFinite(quantity)) {
-    return null;
+    return [];
   }
 
   const side = trade.m ? "outflow" : "inflow";
 
-  return {
-    id: `${trade.s}-${trade.a}`,
-    hash: `${trade.s}-${trade.a}`,
-    from: trade.m ? "Aggressive Seller" : "Passive Seller",
-    to: trade.m ? "Passive Buyer" : "Aggressive Buyer",
-    amount: quantity.toFixed(quantity < 1 ? 4 : 2),
-    type: side,
-    fee: "n/a",
-    block: trade.l,
-    timestamp: formatClock(trade.T),
-  };
+  return [
+    {
+      id: `${trade.s}-${trade.a}`,
+      hash: `${trade.s}-${trade.a}`,
+      from: trade.m ? "Aggressive Seller" : "Passive Seller",
+      to: trade.m ? "Passive Buyer" : "Aggressive Buyer",
+      amount: quantity.toFixed(quantity < 1 ? 4 : 2),
+      type: side,
+      fee: "n/a",
+      block: trade.l,
+      timestamp: formatClock(trade.T),
+      channel: "market",
+    },
+  ];
 };
 
-const mapBitcoinTx = (raw: unknown): LiveTransaction | null => {
-  if (!raw || typeof raw !== "object") {
-    return null;
-  }
+const createBitcoinMapper = () => {
+  const pairCounts = new Map<string, number>();
+  const pairHistory: string[] = [];
+  const parent = new Map<string, string>();
+  const clusterSize = new Map<string, number>();
 
-  const envelope = raw as {
-    op?: string;
-    x?: {
-      hash?: string;
-      time?: number;
-      inputs?: Array<{ prev_out?: { addr?: string; value?: number } }>;
-      out?: Array<{ addr?: string; value?: number }>;
+  const ensureNode = (address: string) => {
+    if (!parent.has(address)) {
+      parent.set(address, address);
+      clusterSize.set(address, 1);
+    }
+  };
+
+  const find = (address: string): string => {
+    ensureNode(address);
+    const immediateParent = parent.get(address)!;
+    if (immediateParent === address) {
+      return address;
+    }
+    const root = find(immediateParent);
+    parent.set(address, root);
+    return root;
+  };
+
+  const union = (a: string, b: string) => {
+    let rootA = find(a);
+    let rootB = find(b);
+    if (rootA === rootB) {
+      return;
+    }
+    const sizeA = clusterSize.get(rootA) ?? 1;
+    const sizeB = clusterSize.get(rootB) ?? 1;
+    if (sizeB > sizeA) {
+      [rootA, rootB] = [rootB, rootA];
+    }
+    parent.set(rootB, rootA);
+    clusterSize.set(rootA, (clusterSize.get(rootA) ?? 1) + (clusterSize.get(rootB) ?? 1));
+    clusterSize.delete(rootB);
+  };
+
+  const pairKey = (a: string, b: string) => (a < b ? `${a}|${b}` : `${b}|${a}`);
+
+  const formatInputEntity = (address: string): string => {
+    const root = find(address);
+    const size = clusterSize.get(root) ?? 1;
+    if (size <= 1) {
+      return shortAddress(address);
+    }
+    return `entity:${root.slice(0, 6)}(${size})`;
+  };
+
+  return (raw: unknown): LiveTransaction[] => {
+    if (!raw || typeof raw !== "object") {
+      return [];
+    }
+
+    const envelope = raw as {
+      op?: string;
+      x?: {
+        hash?: string;
+        time?: number;
+        inputs?: Array<{ prev_out?: { addr?: string; value?: number } }>;
+        out?: Array<{ addr?: string; value?: number }>;
+      };
     };
-  };
 
-  if (envelope.op !== "utx" || !envelope.x) {
-    return null;
-  }
+    if (envelope.op !== "utx" || !envelope.x) {
+      return [];
+    }
 
-  const tx = envelope.x;
-  const outputs = Array.isArray(tx.out) ? tx.out : [];
-  const inputs = Array.isArray(tx.inputs) ? tx.inputs : [];
+    const tx = envelope.x;
+    if (typeof tx.hash !== "string" || typeof tx.time !== "number") {
+      return [];
+    }
 
-  const inputSatoshis = inputs.reduce((sum, input) => {
-    const value = input?.prev_out?.value;
-    return sum + (typeof value === "number" ? value : 0);
-  }, 0);
+    const inputs = (Array.isArray(tx.inputs) ? tx.inputs : [])
+      .map((input) => {
+        const addr = input?.prev_out?.addr;
+        const value = input?.prev_out?.value;
+        if (typeof addr !== "string" || typeof value !== "number" || value <= 0) {
+          return null;
+        }
+        return { addr, value };
+      })
+      .filter((input): input is { addr: string; value: number } => input !== null);
 
-  const outputSatoshis = outputs.reduce((sum, output) => {
-    const value = output?.value;
-    return sum + (typeof value === "number" ? value : 0);
-  }, 0);
+    const outputs = (Array.isArray(tx.out) ? tx.out : [])
+      .map((output) => {
+        const addr = output?.addr;
+        const value = output?.value;
+        if (typeof addr !== "string" || typeof value !== "number" || value <= 0) {
+          return null;
+        }
+        return { addr, value };
+      })
+      .filter((output): output is { addr: string; value: number } => output !== null);
 
-  if (typeof tx.hash !== "string" || typeof tx.time !== "number") {
-    return null;
-  }
+    if (inputs.length === 0 || outputs.length === 0) {
+      return [];
+    }
 
-  const btcAmount = outputSatoshis / 100_000_000;
-  const feeBtc = Math.max(inputSatoshis - outputSatoshis, 0) / 100_000_000;
-  const fromAddress = inputs[0]?.prev_out?.addr;
-  const toAddress = outputs[0]?.addr;
+    const uniqueInputAddresses = [...new Set(inputs.map((input) => input.addr))];
+    for (let i = 0; i < uniqueInputAddresses.length; i += 1) {
+      for (let j = i + 1; j < uniqueInputAddresses.length; j += 1) {
+        const key = pairKey(uniqueInputAddresses[i]!, uniqueInputAddresses[j]!);
+        const next = (pairCounts.get(key) ?? 0) + 1;
+        pairCounts.set(key, next);
+        pairHistory.push(key);
+        if (pairHistory.length > BTC_COSPEND_WINDOW_PAIR_EVENTS) {
+          const staleKey = pairHistory.shift();
+          if (staleKey) {
+            const staleCount = pairCounts.get(staleKey) ?? 0;
+            if (staleCount <= 1) {
+              pairCounts.delete(staleKey);
+            } else {
+              pairCounts.set(staleKey, staleCount - 1);
+            }
+          }
+        }
+        if (next >= BTC_COSPEND_PAIR_REPEAT_THRESHOLD) {
+          union(uniqueInputAddresses[i]!, uniqueInputAddresses[j]!);
+        }
+      }
+    }
 
-  return {
-    id: tx.hash,
-    hash: `${tx.hash.slice(0, 10)}...${tx.hash.slice(-6)}`,
-    from: shortAddress(fromAddress),
-    to: shortAddress(toAddress),
-    amount: btcAmount.toFixed(btcAmount < 1 ? 4 : 2),
-    type: btcAmount >= 1 ? "inflow" : "outflow",
-    fee: `${feeBtc.toFixed(6)} BTC`,
-    block: 0,
-    timestamp: formatClock(tx.time * 1000),
+    const dominantInputs = [...inputs]
+      .sort((a, b) => b.value - a.value)
+      .slice(0, BTC_DOMINANT_PARTICIPANTS);
+    const dominantOutputs = [...outputs]
+      .sort((a, b) => b.value - a.value)
+      .slice(0, BTC_DOMINANT_PARTICIPANTS);
+
+    const inputSatoshis = inputs.reduce((sum, input) => sum + input.value, 0);
+    const outputSatoshis = outputs.reduce((sum, output) => sum + output.value, 0);
+    const feeBtc = Math.max(inputSatoshis - outputSatoshis, 0) / 100_000_000;
+
+    const edges: LiveTransaction[] = [];
+    let edgeIndex = 0;
+
+    for (const input of dominantInputs) {
+      for (const output of dominantOutputs) {
+        const edgeSatoshis = Math.min(input.value, output.value);
+        const edgeBtc = edgeSatoshis / 100_000_000;
+        if (edgeBtc <= 0) {
+          continue;
+        }
+        edges.push({
+          id: `${tx.hash}:${edgeIndex}`,
+          hash: `${tx.hash.slice(0, 10)}...${tx.hash.slice(-6)}`,
+          from: formatInputEntity(input.addr),
+          to: shortAddress(output.addr),
+          amount: edgeBtc.toFixed(edgeBtc < 1 ? 4 : 2),
+          type: edgeBtc >= 1 ? "inflow" : "outflow",
+          fee: `${feeBtc.toFixed(6)} BTC`,
+          block: 0,
+          timestamp: formatClock(tx.time * 1000),
+          channel: "wallet",
+        });
+        edgeIndex += 1;
+      }
+    }
+
+    return edges;
   };
 };
 
-const mapEvmTx = (rawTx: unknown, feeUnit: string): LiveTransaction | null => {
+const mapEvmTx = (
+  rawTx: unknown,
+  feeUnit: string,
+  blockOverride?: number,
+  timestampMsOverride?: number,
+): LiveTransaction | null => {
   if (!rawTx || typeof rawTx !== "object") {
     return null;
   }
@@ -245,7 +359,7 @@ const mapEvmTx = (rawTx: unknown, feeUnit: string): LiveTransaction | null => {
   const feeWei = gasLimit * gasPriceWei;
 
   const blockNum = parseHexBigInt(tx.blockNumber);
-  const block = blockNum ? Number(blockNum) : 0;
+  const block = blockNum ? Number(blockNum) : (blockOverride ?? 0);
 
   return {
     id: tx.hash,
@@ -256,7 +370,8 @@ const mapEvmTx = (rawTx: unknown, feeUnit: string): LiveTransaction | null => {
     type: valueWei > 0n ? "inflow" : "outflow",
     fee: `${formatWei(feeWei, 6)} ${feeUnit}`,
     block,
-    timestamp: formatClock(Date.now()),
+    timestamp: formatClock(timestampMsOverride ?? Date.now()),
+    channel: "wallet",
   };
 };
 
@@ -265,8 +380,8 @@ const getStreamConfig = (network: string, token: string): StreamConfig => {
     return {
       kind: "bitcoin",
       urls: ["wss://ws.blockchain.info/inv"],
-      onOpenPayload: JSON.stringify({ op: "unconfirmed_sub" }),
-      mapper: mapBitcoinTx,
+      onOpenPayloads: [JSON.stringify({ op: "unconfirmed_sub" })],
+      mapper: createBitcoinMapper(),
     };
   }
 
@@ -275,13 +390,18 @@ const getStreamConfig = (network: string, token: string): StreamConfig => {
     return {
       kind: "evm",
       urls: evmConfig.urls,
-      onOpenPayload: JSON.stringify({
-        id: 1,
-        jsonrpc: "2.0",
-        method: "eth_subscribe",
-        params: ["newPendingTransactions"],
-      }),
-      mapper: (raw) => mapEvmTx(raw, evmConfig.feeUnit),
+      onOpenPayloads: [
+        JSON.stringify({
+          id: 1,
+          jsonrpc: "2.0",
+          method: "eth_subscribe",
+          params: ["newHeads"],
+        }),
+      ],
+      mapper: (raw) => {
+        const mapped = mapEvmTx(raw, evmConfig.feeUnit);
+        return mapped ? [mapped] : [];
+      },
       feeUnit: evmConfig.feeUnit,
     };
   }
@@ -290,7 +410,7 @@ const getStreamConfig = (network: string, token: string): StreamConfig => {
   return {
     kind: "binance",
     urls: [`wss://stream.binance.com:9443/ws/${symbol}@aggTrade`],
-    onOpenPayload: null,
+    onOpenPayloads: [],
     mapper: mapBinanceTrade,
   };
 };
@@ -314,7 +434,7 @@ export function useLiveTransactions({
   const attemptsRef = useRef(0);
   const endpointIndexRef = useRef(0);
   const nextRpcIdRef = useRef(10_000);
-  const pendingRpcIdsRef = useRef(new Set<number>());
+  const pendingRpcRequestsRef = useRef(new Map<number, "blockByHash">());
   const lastEvmRequestAtRef = useRef(0);
 
   const controlsRef = useRef({
@@ -326,10 +446,13 @@ export function useLiveTransactions({
 
   const stream = useMemo(() => getStreamConfig(network, token), [network, token]);
 
-  const passesAmountFilters = (tx: LiveTransaction, controls: {
-    minAmount: number;
-    whaleOnly: boolean;
-  }) => {
+  const passesAmountFilters = (
+    tx: LiveTransaction,
+    controls: {
+      minAmount: number;
+      whaleOnly: boolean;
+    },
+  ) => {
     const amount = Number.parseFloat(tx.amount);
     if (!Number.isFinite(amount)) {
       return false;
@@ -357,13 +480,9 @@ export function useLiveTransactions({
     };
 
     // Apply new filter settings immediately to already buffered and visible rows.
-    queueRef.current = queueRef.current.filter((tx) =>
-      passesAmountFilters(tx, immediateControls),
-    );
+    queueRef.current = queueRef.current.filter((tx) => passesAmountFilters(tx, immediateControls));
     setTransactions((prev) =>
-      prev
-        .filter((tx) => passesAmountFilters(tx, immediateControls))
-        .slice(0, maxTransactions),
+      prev.filter((tx) => passesAmountFilters(tx, immediateControls)).slice(0, maxTransactions),
     );
   }, [minAmount, maxTransactions, whaleOnly, paused]);
 
@@ -406,6 +525,7 @@ export function useLiveTransactions({
 
   useEffect(() => {
     let disposed = false;
+    const pendingRpcRequests = pendingRpcRequestsRef.current;
 
     if (reconnectTimerRef.current !== null) {
       window.clearTimeout(reconnectTimerRef.current);
@@ -415,32 +535,36 @@ export function useLiveTransactions({
     attemptsRef.current = 0;
     endpointIndexRef.current = 0;
     nextRpcIdRef.current = 10_000;
-    pendingRpcIdsRef.current.clear();
+    pendingRpcRequests.clear();
     lastEvmRequestAtRef.current = 0;
     queueRef.current = [];
     setTransactions([]);
 
-    const enqueueIfPassesFilters = (mapped: LiveTransaction | null) => {
-      if (!mapped) {
-        return;
-      }
-
-      const amount = Number.parseFloat(mapped.amount);
+    const enqueueIfPassesFilters = (mapped: LiveTransaction[]) => {
       const controls = controlsRef.current;
-
-      if (!Number.isFinite(amount) || controls.paused) {
+      if (controls.paused) {
         return;
       }
 
-      if (amount < controls.minAmount) {
+      const accepted = mapped.filter((tx) => {
+        const amount = Number.parseFloat(tx.amount);
+        if (!Number.isFinite(amount)) {
+          return false;
+        }
+        if (amount < controls.minAmount) {
+          return false;
+        }
+        if (controls.whaleOnly && amount < WHALE_THRESHOLD) {
+          return false;
+        }
+        return true;
+      });
+
+      if (accepted.length === 0) {
         return;
       }
 
-      if (controls.whaleOnly && amount < WHALE_THRESHOLD) {
-        return;
-      }
-
-      queueRef.current.push(mapped);
+      queueRef.current.push(...accepted);
       if (queueRef.current.length > MAX_QUEUE_SIZE) {
         queueRef.current = queueRef.current.slice(-MAX_QUEUE_SIZE);
       }
@@ -462,8 +586,8 @@ export function useLiveTransactions({
         attemptsRef.current = 0;
         setStatus("live");
 
-        if (stream.onOpenPayload) {
-          ws.send(stream.onOpenPayload);
+        for (const payload of stream.onOpenPayloads) {
+          ws.send(payload);
         }
       };
 
@@ -486,64 +610,67 @@ export function useLiveTransactions({
           if (envelope.method === "eth_subscription") {
             const result = envelope.params?.result;
 
-            if (typeof result === "string") {
+            const headerHash =
+              result && typeof result === "object"
+                ? (result as { hash?: unknown }).hash
+                : undefined;
+
+            if (typeof headerHash === "string") {
               const now = Date.now();
-              const inflight = pendingRpcIdsRef.current.size;
+              const inflight = pendingRpcRequests.size;
               if (
                 inflight < MAX_INFLIGHT_EVM_REQUESTS &&
                 now - lastEvmRequestAtRef.current >= EVM_REQUEST_INTERVAL_MS
               ) {
                 const rpcId = nextRpcIdRef.current;
                 nextRpcIdRef.current += 1;
-                pendingRpcIdsRef.current.add(rpcId);
+                pendingRpcRequests.set(rpcId, "blockByHash");
                 lastEvmRequestAtRef.current = now;
                 ws.send(
                   JSON.stringify({
                     id: rpcId,
                     jsonrpc: "2.0",
-                    method: "eth_getTransactionByHash",
-                    params: [result],
+                    method: "eth_getBlockByHash",
+                    params: [headerHash, true],
                   }),
                 );
               }
               return;
             }
 
-            if (result && typeof result === "object") {
-              const maybeHash = (result as { hash?: unknown }).hash;
-              const maybeFrom = (result as { from?: unknown }).from;
-
-              if (typeof maybeHash === "string" && typeof maybeFrom !== "string") {
-                const now = Date.now();
-                const inflight = pendingRpcIdsRef.current.size;
-                if (
-                  inflight < MAX_INFLIGHT_EVM_REQUESTS &&
-                  now - lastEvmRequestAtRef.current >= EVM_REQUEST_INTERVAL_MS
-                ) {
-                  const rpcId = nextRpcIdRef.current;
-                  nextRpcIdRef.current += 1;
-                  pendingRpcIdsRef.current.add(rpcId);
-                  lastEvmRequestAtRef.current = now;
-                  ws.send(
-                    JSON.stringify({
-                      id: rpcId,
-                      jsonrpc: "2.0",
-                      method: "eth_getTransactionByHash",
-                      params: [maybeHash],
-                    }),
-                  );
-                }
-                return;
-              }
-            }
-
             enqueueIfPassesFilters(stream.mapper(result));
             return;
           }
 
-          if (typeof envelope.id === "number" && pendingRpcIdsRef.current.has(envelope.id)) {
-            pendingRpcIdsRef.current.delete(envelope.id);
-            enqueueIfPassesFilters(stream.mapper(envelope.result));
+          if (typeof envelope.id === "number" && pendingRpcRequests.has(envelope.id)) {
+            const requestKind = pendingRpcRequests.get(envelope.id);
+            pendingRpcRequests.delete(envelope.id);
+
+            if (
+              requestKind === "blockByHash" &&
+              envelope.result &&
+              typeof envelope.result === "object"
+            ) {
+              const block = envelope.result as {
+                number?: unknown;
+                timestamp?: unknown;
+                transactions?: unknown;
+              };
+
+              const blockNumberRaw = parseHexBigInt(block.number);
+              const blockNumber = blockNumberRaw ? Number(blockNumberRaw) : 0;
+              const blockTimestampRaw = parseHexBigInt(block.timestamp);
+              const blockTimestampMs = blockTimestampRaw
+                ? Number(blockTimestampRaw) * 1000
+                : Date.now();
+              const txs = Array.isArray(block.transactions) ? block.transactions : [];
+
+              const mapped = txs
+                .map((tx) => mapEvmTx(tx, stream.feeUnit ?? "ETH", blockNumber, blockTimestampMs))
+                .filter((tx): tx is LiveTransaction => tx !== null);
+
+              enqueueIfPassesFilters(mapped);
+            }
           }
         } catch {
           // Ignore malformed websocket payloads.
@@ -579,7 +706,7 @@ export function useLiveTransactions({
       }
 
       queueRef.current = [];
-      pendingRpcIdsRef.current.clear();
+      pendingRpcRequests.clear();
 
       if (wsRef.current && wsRef.current.readyState < WebSocket.CLOSING) {
         wsRef.current.close();
