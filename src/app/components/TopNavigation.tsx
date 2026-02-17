@@ -1,9 +1,13 @@
+import { useState } from "react";
 import { Search, Activity } from "lucide-react";
 import { ConnectionStatus } from "../hooks/useLiveTransactions";
 import {
   Select,
   SelectContent,
+  SelectGroup,
   SelectItem,
+  SelectLabel,
+  SelectSeparator,
   SelectTrigger,
   SelectValue,
 } from "./ui/select";
@@ -38,6 +42,49 @@ const statusBadgeClass: Record<ConnectionStatus, string> = {
   error: "bg-destructive/10 border-destructive/30 text-destructive",
 };
 
+const iconPath = (filename: string) => `${import.meta.env.BASE_URL}icons/${filename}`;
+
+const networkMeta = {
+  ethereum: { label: "Ethereum", iconSrc: iconPath("eth.svg") },
+  bitcoin: { label: "Bitcoin", iconSrc: iconPath("btc.svg") },
+  bsc: { label: "BSC", iconSrc: iconPath("bnb.svg") },
+  polygon: { label: "Polygon", iconSrc: iconPath("matic.svg") },
+  arbitrum: { label: "Arbitrum", iconSrc: iconPath("arbitrum.svg") },
+} as const;
+
+const tokenMeta = {
+  btc: { label: "BTC", iconSrc: iconPath("btc.svg") },
+  eth: { label: "ETH", iconSrc: iconPath("eth.svg") },
+  sol: { label: "SOL", iconSrc: iconPath("sol.svg") },
+  bnb: { label: "BNB", iconSrc: iconPath("bnb.svg") },
+  xrp: { label: "XRP", iconSrc: iconPath("xrp.svg") },
+} as const;
+
+function SelectorIcon({ src, label }: { src: string; label: string }) {
+  const [hasError, setHasError] = useState(false);
+
+  if (hasError) {
+    return (
+      <span
+        className="inline-flex h-4 w-4 items-center justify-center rounded-full bg-muted text-[8px] font-semibold text-muted-foreground"
+        aria-hidden="true"
+      >
+        {label.slice(0, 1).toUpperCase()}
+      </span>
+    );
+  }
+
+  return (
+    <img
+      src={src}
+      alt=""
+      aria-hidden="true"
+      className="h-4 w-4 rounded-full object-cover"
+      onError={() => setHasError(true)}
+    />
+  );
+}
+
 export function TopNavigation({
   network,
   token,
@@ -55,43 +102,168 @@ export function TopNavigation({
             <span className="text-xl font-semibold tracking-tight">WhaleFlow</span>
           </div>
 
-          {/* Network Selector */}
-          <Select value={network} onValueChange={onNetworkChange}>
-            <SelectTrigger className="w-[140px] bg-secondary/50 border-border/50 hover:bg-secondary/70 transition-colors">
-              <SelectValue placeholder="Network" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="ethereum">Ethereum</SelectItem>
-              <SelectItem value="bitcoin">Bitcoin</SelectItem>
-              <SelectItem value="bsc">BSC</SelectItem>
-              <SelectItem value="polygon">Polygon</SelectItem>
-              <SelectItem value="arbitrum">Arbitrum</SelectItem>
-            </SelectContent>
-          </Select>
+          <div className="flex items-center gap-1.5 py-0.5">
+            <div className="flex flex-col gap-0.5">
+              <span className="text-[9px] leading-none font-medium uppercase tracking-[0.12em] text-muted-foreground">
+                Blockchain
+              </span>
+              <Select value={network} onValueChange={onNetworkChange}>
+                <SelectTrigger
+                  size="sm"
+                  title="Chooses which blockchain's whale transfers are shown"
+                  className="h-7 w-[108px] sm:w-[124px] bg-muted/40 border-border/40 px-2 text-xs hover:bg-muted/70 transition-colors"
+                >
+                  <SelectorIcon
+                    src={
+                      networkMeta[network as keyof typeof networkMeta]?.iconSrc ??
+                      iconPath("eth.svg")
+                    }
+                    label={networkMeta[network as keyof typeof networkMeta]?.label ?? "Network"}
+                  />
+                  <SelectValue placeholder="Blockchain" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectGroup>
+                    <SelectLabel>Data source chain</SelectLabel>
+                    <SelectSeparator />
+                    <SelectItem
+                      value="ethereum"
+                      icon={
+                        <SelectorIcon
+                          src={networkMeta.ethereum.iconSrc}
+                          label={networkMeta.ethereum.label}
+                        />
+                      }
+                    >
+                      {networkMeta.ethereum.label}
+                    </SelectItem>
+                    <SelectItem
+                      value="bitcoin"
+                      icon={
+                        <SelectorIcon
+                          src={networkMeta.bitcoin.iconSrc}
+                          label={networkMeta.bitcoin.label}
+                        />
+                      }
+                    >
+                      {networkMeta.bitcoin.label}
+                    </SelectItem>
+                    <SelectItem
+                      value="bsc"
+                      icon={
+                        <SelectorIcon src={networkMeta.bsc.iconSrc} label={networkMeta.bsc.label} />
+                      }
+                    >
+                      {networkMeta.bsc.label}
+                    </SelectItem>
+                    <SelectItem
+                      value="polygon"
+                      icon={
+                        <SelectorIcon
+                          src={networkMeta.polygon.iconSrc}
+                          label={networkMeta.polygon.label}
+                        />
+                      }
+                    >
+                      {networkMeta.polygon.label}
+                    </SelectItem>
+                    <SelectItem
+                      value="arbitrum"
+                      icon={
+                        <SelectorIcon
+                          src={networkMeta.arbitrum.iconSrc}
+                          label={networkMeta.arbitrum.label}
+                        />
+                      }
+                    >
+                      {networkMeta.arbitrum.label}
+                    </SelectItem>
+                  </SelectGroup>
+                </SelectContent>
+              </Select>
+            </div>
 
-          {/* Token Selector */}
-          <Select value={token} onValueChange={onTokenChange}>
-            <SelectTrigger className="w-[140px] bg-secondary/50 border-border/50 hover:bg-secondary/70 transition-colors">
-              <SelectValue placeholder="Token" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="btc">BTC</SelectItem>
-              <SelectItem value="eth">ETH</SelectItem>
-              <SelectItem value="sol">SOL</SelectItem>
-              <SelectItem value="bnb">BNB</SelectItem>
-              <SelectItem value="xrp">XRP</SelectItem>
-            </SelectContent>
-          </Select>
+            <div className="h-7 w-px bg-border/60 self-end" />
+
+            <div className="flex flex-col gap-0.5">
+              <span className="text-[9px] leading-none font-medium uppercase tracking-[0.12em] text-muted-foreground">
+                Asset
+              </span>
+              <Select value={token} onValueChange={onTokenChange}>
+                <SelectTrigger
+                  size="sm"
+                  title="Chooses the asset symbol used for stream and value context"
+                  className="h-7 w-[82px] sm:w-[94px] bg-muted/40 border-border/40 px-2 text-xs hover:bg-muted/70 transition-colors"
+                >
+                  <SelectorIcon
+                    src={tokenMeta[token as keyof typeof tokenMeta]?.iconSrc ?? iconPath("eth.svg")}
+                    label={tokenMeta[token as keyof typeof tokenMeta]?.label ?? "Asset"}
+                  />
+                  <SelectValue placeholder="Asset" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectGroup>
+                    <SelectLabel>Trade stream symbol</SelectLabel>
+                    <SelectSeparator />
+                    <SelectItem
+                      value="btc"
+                      icon={
+                        <SelectorIcon src={tokenMeta.btc.iconSrc} label={tokenMeta.btc.label} />
+                      }
+                    >
+                      {tokenMeta.btc.label}
+                    </SelectItem>
+                    <SelectItem
+                      value="eth"
+                      icon={
+                        <SelectorIcon src={tokenMeta.eth.iconSrc} label={tokenMeta.eth.label} />
+                      }
+                    >
+                      {tokenMeta.eth.label}
+                    </SelectItem>
+                    <SelectItem
+                      value="sol"
+                      icon={
+                        <SelectorIcon src={tokenMeta.sol.iconSrc} label={tokenMeta.sol.label} />
+                      }
+                    >
+                      {tokenMeta.sol.label}
+                    </SelectItem>
+                    <SelectItem
+                      value="bnb"
+                      icon={
+                        <SelectorIcon src={tokenMeta.bnb.iconSrc} label={tokenMeta.bnb.label} />
+                      }
+                    >
+                      {tokenMeta.bnb.label}
+                    </SelectItem>
+                    <SelectItem
+                      value="xrp"
+                      icon={
+                        <SelectorIcon src={tokenMeta.xrp.iconSrc} label={tokenMeta.xrp.label} />
+                      }
+                    >
+                      {tokenMeta.xrp.label}
+                    </SelectItem>
+                  </SelectGroup>
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
         </div>
 
         {/* Right side */}
         <div className="flex items-center gap-4">
           {/* Live Indicator */}
-          <div className={`flex items-center gap-2 px-3 py-1.5 border rounded-lg ${statusBadgeClass[status]}`}>
+          <div
+            className={`flex items-center gap-2 px-3 py-1.5 border rounded-lg ${statusBadgeClass[status]}`}
+          >
             <div className="relative">
               <div className={`w-2 h-2 rounded-full animate-pulse ${statusColor[status]}`} />
               {status !== "error" && (
-                <div className={`absolute inset-0 w-2 h-2 rounded-full animate-ping ${statusColor[status]}`} />
+                <div
+                  className={`absolute inset-0 w-2 h-2 rounded-full animate-ping ${statusColor[status]}`}
+                />
               )}
             </div>
             <span className="text-xs font-semibold tracking-wider">{statusLabel[status]}</span>
