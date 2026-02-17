@@ -1,4 +1,5 @@
 import { Search, Activity } from "lucide-react";
+import { ConnectionStatus } from "../hooks/useLiveTransactions";
 import {
   Select,
   SelectContent,
@@ -8,7 +9,42 @@ import {
 } from "./ui/select";
 import { Input } from "./ui/input";
 
-export function TopNavigation() {
+interface TopNavigationProps {
+  network: string;
+  token: string;
+  status: ConnectionStatus;
+  onNetworkChange: (value: string) => void;
+  onTokenChange: (value: string) => void;
+}
+
+const statusLabel: Record<ConnectionStatus, string> = {
+  connecting: "CONNECTING",
+  live: "LIVE",
+  reconnecting: "RECONNECTING",
+  error: "ERROR",
+};
+
+const statusColor: Record<ConnectionStatus, string> = {
+  connecting: "bg-amber-500",
+  live: "bg-success",
+  reconnecting: "bg-amber-500",
+  error: "bg-destructive",
+};
+
+const statusBadgeClass: Record<ConnectionStatus, string> = {
+  connecting: "bg-amber-500/10 border-amber-500/30 text-amber-500",
+  live: "bg-success/10 border-success/30 text-success",
+  reconnecting: "bg-amber-500/10 border-amber-500/30 text-amber-500",
+  error: "bg-destructive/10 border-destructive/30 text-destructive",
+};
+
+export function TopNavigation({
+  network,
+  token,
+  status,
+  onNetworkChange,
+  onTokenChange,
+}: TopNavigationProps) {
   return (
     <div className="fixed top-0 left-0 right-0 h-16 bg-card/80 backdrop-blur-xl border-b border-border z-50">
       <div className="flex items-center justify-between h-full px-6">
@@ -20,7 +56,7 @@ export function TopNavigation() {
           </div>
 
           {/* Network Selector */}
-          <Select defaultValue="ethereum">
+          <Select value={network} onValueChange={onNetworkChange}>
             <SelectTrigger className="w-[140px] bg-secondary/50 border-border/50 hover:bg-secondary/70 transition-colors">
               <SelectValue placeholder="Network" />
             </SelectTrigger>
@@ -34,16 +70,16 @@ export function TopNavigation() {
           </Select>
 
           {/* Token Selector */}
-          <Select defaultValue="eth">
+          <Select value={token} onValueChange={onTokenChange}>
             <SelectTrigger className="w-[140px] bg-secondary/50 border-border/50 hover:bg-secondary/70 transition-colors">
               <SelectValue placeholder="Token" />
             </SelectTrigger>
             <SelectContent>
+              <SelectItem value="btc">BTC</SelectItem>
               <SelectItem value="eth">ETH</SelectItem>
-              <SelectItem value="usdt">USDT</SelectItem>
-              <SelectItem value="usdc">USDC</SelectItem>
-              <SelectItem value="wbtc">WBTC</SelectItem>
-              <SelectItem value="dai">DAI</SelectItem>
+              <SelectItem value="sol">SOL</SelectItem>
+              <SelectItem value="bnb">BNB</SelectItem>
+              <SelectItem value="xrp">XRP</SelectItem>
             </SelectContent>
           </Select>
         </div>
@@ -51,12 +87,14 @@ export function TopNavigation() {
         {/* Right side */}
         <div className="flex items-center gap-4">
           {/* Live Indicator */}
-          <div className="flex items-center gap-2 px-3 py-1.5 bg-success/10 border border-success/30 rounded-lg">
+          <div className={`flex items-center gap-2 px-3 py-1.5 border rounded-lg ${statusBadgeClass[status]}`}>
             <div className="relative">
-              <div className="w-2 h-2 bg-success rounded-full animate-pulse" />
-              <div className="absolute inset-0 w-2 h-2 bg-success rounded-full animate-ping" />
+              <div className={`w-2 h-2 rounded-full animate-pulse ${statusColor[status]}`} />
+              {status !== "error" && (
+                <div className={`absolute inset-0 w-2 h-2 rounded-full animate-ping ${statusColor[status]}`} />
+              )}
             </div>
-            <span className="text-xs font-semibold text-success tracking-wider">LIVE</span>
+            <span className="text-xs font-semibold tracking-wider">{statusLabel[status]}</span>
           </div>
 
           {/* Search */}

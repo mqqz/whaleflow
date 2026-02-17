@@ -1,145 +1,236 @@
-import { useEffect, useState } from "react";
-import { ArrowRight, Fuel } from "lucide-react";
+import { ArrowRight, ChevronDown, ChevronUp, Fuel, Pause, Play, SlidersHorizontal, TimerReset } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
+import { ReactNode } from "react";
+import {
+  ConnectionStatus,
+  LiveTransaction,
+} from "../hooks/useLiveTransactions";
+import { Button } from "./ui/button";
+import { Switch } from "./ui/switch";
+import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from "./ui/collapsible";
 
-interface Transaction {
-  id: string;
-  hash: string;
-  from: string;
-  to: string;
-  amount: string;
-  type: "inflow" | "outflow";
-  gas: string;
-  block: number;
-  timestamp: string;
+interface TransactionFeedProps {
+  network: string;
+  token: string;
+  minAmount: number;
+  status: ConnectionStatus;
+  transactions: LiveTransaction[];
+  pauseStream: boolean;
+  slowMode: boolean;
+  onPauseStreamChange: (value: boolean) => void;
+  onSlowModeChange: (value: boolean) => void;
+  controlsOpen: boolean;
+  onControlsOpenChange: (open: boolean) => void;
+  controlsPanel?: ReactNode;
 }
 
-const generateMockTransaction = (): Transaction => {
-  const types: ("inflow" | "outflow")[] = ["inflow", "outflow"];
-  const type = types[Math.floor(Math.random() * types.length)];
-  
-  return {
-    id: Math.random().toString(36).substring(7),
-    hash: `0x${Math.random().toString(16).substring(2, 10)}...${Math.random().toString(16).substring(2, 6)}`,
-    from: `0x${Math.random().toString(16).substring(2, 6)}...${Math.random().toString(16).substring(2, 6)}`,
-    to: `0x${Math.random().toString(16).substring(2, 6)}...${Math.random().toString(16).substring(2, 6)}`,
-    amount: (Math.random() * 500 + 1).toFixed(2),
-    type,
-    gas: (Math.random() * 0.1).toFixed(4),
-    block: Math.floor(Math.random() * 100000) + 19000000,
-    timestamp: new Date().toLocaleTimeString(),
-  };
+const statusText: Record<ConnectionStatus, string> = {
+  connecting: "Connecting to websocket...",
+  live: "Streaming live events",
+  reconnecting: "Connection dropped, retrying...",
+  error: "Socket error. Retrying automatically...",
 };
 
-export function TransactionFeed() {
-  const [transactions, setTransactions] = useState<Transaction[]>([
-    generateMockTransaction(),
-    generateMockTransaction(),
-    generateMockTransaction(),
-  ]);
+const statusUi: Record<
+  ConnectionStatus,
+  { title: string; dotClass: string; animateClass: string }
+> = {
+  connecting: {
+    title: "Connecting",
+    dotClass: "bg-amber-500",
+    animateClass: "animate-pulse",
+  },
+  live: {
+    title: "Live",
+    dotClass: "bg-success",
+    animateClass: "animate-pulse",
+  },
+  reconnecting: {
+    title: "Reconnecting",
+    dotClass: "bg-amber-500",
+    animateClass: "animate-pulse",
+  },
+  error: {
+    title: "Disconnected",
+    dotClass: "bg-destructive",
+    animateClass: "",
+  },
+};
 
-  useEffect(() => {
-    const interval = setInterval(() => {
-      setTransactions((prev) => {
-        const newTx = generateMockTransaction();
-        return [newTx, ...prev.slice(0, 9)]; // Keep last 10 transactions
-      });
-    }, 3000); // New transaction every 3 seconds
+const tokenLabels: Record<string, string> = {
+  btc: "BTC",
+  eth: "ETH",
+  sol: "SOL",
+  bnb: "BNB",
+  xrp: "XRP",
+};
 
-    return () => clearInterval(interval);
-  }, []);
+export function TransactionFeed({
+  network,
+  token,
+  minAmount,
+  status,
+  transactions,
+  pauseStream,
+  slowMode,
+  onPauseStreamChange,
+  onSlowModeChange,
+  controlsOpen,
+  onControlsOpenChange,
+  controlsPanel,
+}: TransactionFeedProps) {
+  const upperNetwork = network.toUpperCase();
+  const tokenLabel = tokenLabels[token] ?? token.toUpperCase();
+  const statusMeta = pauseStream
+    ? {
+        title: "Paused",
+        dotClass: "bg-amber-500",
+        animateClass: "",
+      }
+    : statusUi[status];
 
   return (
-    <div className="h-[200px] bg-card/60 backdrop-blur-sm border-t border-border">
-      <div className="h-full flex flex-col">
-        {/* Header */}
-        <div className="flex items-center justify-between px-6 py-3 border-b border-border/50">
+    <div className="bg-card/60 backdrop-blur-sm border-t border-border">
+      <Collapsible open={controlsOpen} onOpenChange={onControlsOpenChange}>
+        <div className="flex flex-col">
+        <div className="flex items-center justify-between px-6 py-3 border-b border-border/50 text-sm">
           <div className="flex items-center gap-2">
-            <div className="w-2 h-2 bg-success rounded-full animate-pulse" />
-            <h3 className="font-semibold">Live Transaction Feed</h3>
-          </div>
-          <div className="flex items-center gap-4 text-xs text-muted-foreground">
-            <div className="flex items-center gap-1.5">
-              <div className="w-2 h-2 rounded-full bg-success" />
-              <span>Inflow</span>
-            </div>
-            <div className="flex items-center gap-1.5">
-              <div className="w-2 h-2 rounded-full bg-destructive" />
-              <span>Outflow</span>
-            </div>
-          </div>
-        </div>
-
-        {/* Transaction List */}
-        <div className="flex-1 overflow-hidden px-6 py-2">
-          <AnimatePresence mode="popLayout">
-            {transactions.map((tx) => (
-              <motion.div
-                key={tx.id}
-                initial={{ x: 100, opacity: 0 }}
-                animate={{ x: 0, opacity: 1 }}
-                exit={{ x: -100, opacity: 0 }}
-                transition={{ duration: 0.3 }}
-                className="mb-2"
+            <h3 className="font-semibold text-base">Transaction Feed</h3>
+            <div className="ml-2 inline-flex items-center gap-0.5">
+              <div className="inline-flex items-center gap-1.5 text-sm text-muted-foreground">
+                <span className={`w-2 h-2 rounded-full ${statusMeta.dotClass} ${statusMeta.animateClass}`} />
+                <span>{statusMeta.title}</span>
+              </div>
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon"
+                onClick={() => onPauseStreamChange(!pauseStream)}
+                aria-pressed={pauseStream}
+                className={`h-7 w-7 rounded-full ${
+                  pauseStream ? "text-success hover:text-success" : "text-amber-500 hover:text-amber-500"
+                }`}
               >
-                <div className="flex items-start gap-4 p-3 bg-secondary/20 hover:bg-secondary/40 rounded-lg border border-border/20 transition-all group cursor-pointer">
-                  {/* Transaction Hash */}
-                  <div className="w-[140px]">
-                    <p className="text-xs text-muted-foreground mb-0.5">Hash</p>
-                    <p className="text-xs font-mono font-semibold group-hover:text-primary transition-colors">
-                      {tx.hash}
-                    </p>
-                  </div>
-
-                  {/* From -> To */}
-                  <div className="flex-1 flex items-center gap-2">
-                    <div className="flex-1">
-                      <p className="text-xs text-muted-foreground mb-0.5">From</p>
-                      <p className="text-xs font-mono">{tx.from}</p>
-                    </div>
-                    <ArrowRight className="w-3.5 h-3.5 text-muted-foreground flex-shrink-0" />
-                    <div className="flex-1">
-                      <p className="text-xs text-muted-foreground mb-0.5">To</p>
-                      <p className="text-xs font-mono">{tx.to}</p>
-                    </div>
-                  </div>
-
-                  {/* Amount */}
-                  <div className="w-[120px] text-right">
-                    <p className="text-xs text-muted-foreground mb-0.5">Amount</p>
-                    <p className={`text-sm font-bold ${
-                      tx.type === "inflow" ? "text-success" : "text-destructive"
-                    }`}>
-                      {tx.type === "inflow" ? "+" : "-"}{tx.amount} ETH
-                    </p>
-                  </div>
-
-                  {/* Gas */}
-                  <div className="w-[100px]">
-                    <p className="text-xs text-muted-foreground mb-0.5">Gas Fee</p>
-                    <div className="flex items-center gap-1">
-                      <Fuel className="w-3 h-3 text-muted-foreground" />
-                      <p className="text-xs font-mono">{tx.gas} ETH</p>
-                    </div>
-                  </div>
-
-                  {/* Block */}
-                  <div className="w-[100px]">
-                    <p className="text-xs text-muted-foreground mb-0.5">Block</p>
-                    <p className="text-xs font-mono">#{tx.block}</p>
-                  </div>
-
-                  {/* Time */}
-                  <div className="w-[100px] text-right">
-                    <p className="text-xs text-muted-foreground mb-0.5">Time</p>
-                    <p className="text-xs font-mono">{tx.timestamp}</p>
-                  </div>
-                </div>
-              </motion.div>
-            ))}
-          </AnimatePresence>
+                {pauseStream ? (
+                  <Play className="w-3.5 h-3.5" />
+                ) : (
+                  <Pause className="w-3.5 h-3.5" />
+                )}
+              </Button>
+            </div>
+          </div>
+          <div className="flex items-center gap-4 text-sm text-muted-foreground">
+            <span>{upperNetwork}</span>
+            <span>≥ {minAmount.toFixed(minAmount < 10 ? 1 : 0)} {tokenLabel}</span>
+            <label className="inline-flex items-center gap-1.5 text-muted-foreground">
+              <TimerReset className="w-3.5 h-3.5" />
+              <Switch
+                checked={slowMode}
+                onCheckedChange={(checked) => onSlowModeChange(Boolean(checked))}
+              />
+            </label>
+            <CollapsibleTrigger asChild>
+              <button
+                type="button"
+                className="inline-flex items-center gap-1 text-muted-foreground hover:text-foreground transition-colors"
+                aria-label="Toggle feed controls"
+              >
+                <SlidersHorizontal className="w-4 h-4" />
+                {controlsOpen ? (
+                  <ChevronUp className="w-4 h-4" />
+                ) : (
+                  <ChevronDown className="w-4 h-4" />
+                )}
+              </button>
+            </CollapsibleTrigger>
+          </div>
         </div>
-      </div>
+
+        {controlsPanel ? (
+          <CollapsibleContent className="px-6 py-3 border-b border-border/50">
+            {controlsPanel}
+          </CollapsibleContent>
+        ) : null}
+
+        <div className="px-6 py-2">
+          {transactions.length === 0 ? (
+            <div className="h-24 grid place-items-center text-sm text-muted-foreground">
+              {statusText[status]}
+            </div>
+          ) : (
+            <AnimatePresence mode="popLayout">
+              {transactions.map((tx) => (
+                <motion.div
+                  key={tx.id}
+                  initial={{ x: 100, opacity: 0 }}
+                  animate={{ x: 0, opacity: 1 }}
+                  exit={{ x: -100, opacity: 0 }}
+                  transition={{ duration: 0.25 }}
+                  className="mb-2"
+                >
+                  <div className="flex items-start gap-4 p-3 bg-secondary/20 hover:bg-secondary/40 rounded-lg border border-border/20 transition-all group cursor-pointer">
+                    <div className="w-[140px]">
+                      <p className="text-xs text-muted-foreground mb-0.5">Event</p>
+                      <p className="text-xs font-mono font-semibold group-hover:text-primary transition-colors">
+                        {tx.hash}
+                      </p>
+                    </div>
+
+                    <div className="flex-1 flex items-center gap-2">
+                      <div className="flex-1">
+                        <p className="text-xs text-muted-foreground mb-0.5">From</p>
+                        <p className="text-xs font-mono">{tx.from}</p>
+                      </div>
+                      <ArrowRight className="w-3.5 h-3.5 text-muted-foreground flex-shrink-0" />
+                      <div className="flex-1">
+                        <p className="text-xs text-muted-foreground mb-0.5">To</p>
+                        <p className="text-xs font-mono">{tx.to}</p>
+                      </div>
+                    </div>
+
+                    <div className="w-[120px] text-right">
+                      <p className="text-xs text-muted-foreground mb-0.5">Amount</p>
+                      <p
+                        className={`text-sm font-bold ${
+                          tx.type === "inflow" ? "text-success" : "text-destructive"
+                        }`}
+                      >
+                        {tx.type === "inflow" ? "+" : "-"}
+                        {tx.amount} {tokenLabel}
+                      </p>
+                    </div>
+
+                    <div className="w-[120px]">
+                      <p className="text-xs text-muted-foreground mb-0.5">Gas Fee</p>
+                      <div className="flex items-center gap-1">
+                        <Fuel className="w-3 h-3 text-muted-foreground" />
+                        <p className="text-xs font-mono">{tx.fee}</p>
+                      </div>
+                    </div>
+
+                    <div className="w-[90px]">
+                      <p className="text-xs text-muted-foreground mb-0.5">Block</p>
+                      <p className="text-xs font-mono">
+                        {tx.block > 0 ? `#${tx.block}` : "pending"}
+                      </p>
+                    </div>
+
+                    <div className="w-[90px] text-right">
+                      <p className="text-xs text-muted-foreground mb-0.5">Time</p>
+                      <p className="text-xs font-mono">{tx.timestamp}</p>
+                    </div>
+                  </div>
+                </motion.div>
+              ))}
+            </AnimatePresence>
+          )}
+        </div>
+        </div>
+      </Collapsible>
     </div>
   );
 }
