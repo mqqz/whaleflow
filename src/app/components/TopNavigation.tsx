@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { Search, Activity } from "lucide-react";
+import { motion } from "motion/react";
 import { ConnectionStatus } from "../hooks/useLiveTransactions";
 import {
   Select,
@@ -60,6 +61,12 @@ const tokenMeta = {
   xrp: { label: "XRP", iconSrc: iconPath("xrp.svg") },
 } as const;
 
+const sections = [
+  { id: "monitor", label: "Monitor" },
+  { id: "impact", label: "Impact" },
+  { id: "explorer", label: "Explorer" },
+] as const;
+
 function SelectorIcon({ src, label }: { src: string; label: string }) {
   const [hasError, setHasError] = useState(false);
 
@@ -92,20 +99,24 @@ export function TopNavigation({
   onNetworkChange,
   onTokenChange,
 }: TopNavigationProps) {
+  const [activeSection, setActiveSection] = useState<(typeof sections)[number]["id"]>("monitor");
+
   return (
     <div className="fixed top-0 left-0 right-0 h-16 bg-card/80 backdrop-blur-xl border-b border-border z-50">
-      <div className="flex items-center justify-between h-full px-6">
-        {/* Logo */}
-        <div className="flex items-center gap-8">
+      <div className="grid grid-cols-[1fr_auto_1fr] items-center h-full px-6 gap-4">
+        {/* Left */}
+        <div className="flex items-center min-w-0 gap-5">
           <div className="flex items-center gap-2">
-            <Activity className="w-7 h-7 text-primary" />
-            <span className="text-xl font-semibold tracking-tight">WhaleFlow</span>
+            <Activity className="w-6 h-6 text-primary" />
+            <span className="text-lg font-semibold tracking-tight">WhaleFlow</span>
           </div>
 
-          <div className="flex items-center gap-1.5 py-0.5">
+          <div className="hidden sm:flex items-center gap-1.5 py-0.5">
+            <div className="h-7 w-px bg-border/60 self-end" />
+
             <div className="flex flex-col gap-0.5">
               <span className="text-[9px] leading-none font-medium uppercase tracking-[0.12em] text-muted-foreground">
-                Blockchain
+                Network
               </span>
               <Select value={network} onValueChange={onNetworkChange}>
                 <SelectTrigger
@@ -120,7 +131,7 @@ export function TopNavigation({
                     }
                     label={networkMeta[network as keyof typeof networkMeta]?.label ?? "Network"}
                   />
-                  <SelectValue placeholder="Blockchain" />
+                  <SelectValue placeholder="Network" />
                 </SelectTrigger>
                 <SelectContent>
                   <SelectGroup>
@@ -187,7 +198,7 @@ export function TopNavigation({
 
             <div className="flex flex-col gap-0.5">
               <span className="text-[9px] leading-none font-medium uppercase tracking-[0.12em] text-muted-foreground">
-                Asset
+                Token
               </span>
               <Select value={token} onValueChange={onTokenChange}>
                 <SelectTrigger
@@ -197,9 +208,9 @@ export function TopNavigation({
                 >
                   <SelectorIcon
                     src={tokenMeta[token as keyof typeof tokenMeta]?.iconSrc ?? iconPath("eth.svg")}
-                    label={tokenMeta[token as keyof typeof tokenMeta]?.label ?? "Asset"}
+                    label={tokenMeta[token as keyof typeof tokenMeta]?.label ?? "Token"}
                   />
-                  <SelectValue placeholder="Asset" />
+                  <SelectValue placeholder="Token" />
                 </SelectTrigger>
                 <SelectContent>
                   <SelectGroup>
@@ -252,11 +263,39 @@ export function TopNavigation({
           </div>
         </div>
 
-        {/* Right side */}
-        <div className="flex items-center gap-4">
+        {/* Center */}
+        <div className="hidden md:flex items-center justify-center">
+          <div className="inline-flex items-center gap-1 rounded-lg border border-border/60 bg-card/50 p-1">
+            {sections.map((section) => {
+              const isActive = activeSection === section.id;
+              return (
+                <button
+                  key={section.id}
+                  type="button"
+                  onClick={() => setActiveSection(section.id)}
+                  className={`relative px-4 py-1.5 text-sm transition-colors ${
+                    isActive ? "text-foreground" : "text-muted-foreground hover:text-foreground"
+                  }`}
+                >
+                  {section.label}
+                  {isActive ? (
+                    <motion.span
+                      layoutId="top-nav-active-underline"
+                      className="absolute left-2 right-2 -bottom-[2px] h-[2px] rounded-full bg-primary/70"
+                      transition={{ type: "spring", stiffness: 460, damping: 36 }}
+                    />
+                  ) : null}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+
+        {/* Right */}
+        <div className="flex items-center gap-4 justify-self-end">
           {/* Live Indicator */}
           <div
-            className={`flex items-center gap-2 px-3 py-1.5 border rounded-lg ${statusBadgeClass[status]}`}
+            className={`hidden sm:flex items-center gap-2 px-3 py-1.5 border rounded-lg ${statusBadgeClass[status]}`}
           >
             <div className="relative">
               <div className={`w-2 h-2 rounded-full animate-pulse ${statusColor[status]}`} />
@@ -274,7 +313,7 @@ export function TopNavigation({
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
             <Input
               placeholder="Search wallet address..."
-              className="w-[280px] pl-9 bg-secondary/50 border-border/50 hover:bg-secondary/70 focus:bg-secondary transition-colors"
+              className="w-[220px] lg:w-[260px] pl-9 bg-secondary/50 border-border/50 hover:bg-secondary/70 focus:bg-secondary transition-colors"
             />
           </div>
         </div>
