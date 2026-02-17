@@ -32,13 +32,6 @@ interface TransactionFeedProps {
   controlsPanel?: ReactNode;
 }
 
-const statusText: Record<ConnectionStatus, string> = {
-  connecting: "Connecting to websocket...",
-  live: "Streaming live events",
-  reconnecting: "Connection dropped, retrying...",
-  error: "Socket error. Retrying automatically...",
-};
-
 const statusUi: Record<
   ConnectionStatus,
   { title: string; dotClass: string; animateClass: string }
@@ -100,9 +93,9 @@ export function TransactionFeed({
     : statusUi[status];
 
   return (
-    <div className="bg-card/60 backdrop-blur-sm border-t border-border h-full rounded-b-xl overflow-hidden">
+    <div className="bg-card/60 backdrop-blur-sm border border-border/60 rounded-b-xl min-h-[calc(100dvh-4rem-420px-1.5rem)]">
       <Collapsible open={controlsOpen} onOpenChange={onControlsOpenChange}>
-        <div className="flex flex-col h-full min-h-0">
+        <div className="flex flex-col min-h-full">
           <div className="flex items-center justify-between px-6 py-3 border-b border-border/50 text-sm">
             <div className="flex items-center gap-2">
               <h3 className="font-semibold text-base">Transaction Feed</h3>
@@ -168,10 +161,25 @@ export function TransactionFeed({
             </CollapsibleContent>
           ) : null}
 
-          <div className="px-6 py-2 flex-1 min-h-0 overflow-y-auto">
+          <div className="px-6 py-2">
             {transactions.length === 0 ? (
-              <div className="h-full min-h-[220px] grid place-items-center text-sm text-muted-foreground text-center">
-                {statusText[status]}
+              <div className="min-h-[220px] flex items-center justify-center">
+                <div className="text-sm text-muted-foreground text-center">
+                  {pauseStream ? (
+                    "Stream paused"
+                  ) : status === "error" ? (
+                    "Connection issue. Reconnecting automatically..."
+                  ) : (
+                    <span className="inline-flex items-center gap-0.5">
+                      <span>Waiting for transactions to come in</span>
+                      <span className="inline-flex">
+                        <span className="animate-pulse [animation-delay:0ms]">.</span>
+                        <span className="animate-pulse [animation-delay:180ms]">.</span>
+                        <span className="animate-pulse [animation-delay:360ms]">.</span>
+                      </span>
+                    </span>
+                  )}
+                </div>
               </div>
             ) : (
               <AnimatePresence mode="popLayout">

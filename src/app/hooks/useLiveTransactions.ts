@@ -12,6 +12,7 @@ export interface LiveTransaction {
   fee: string;
   block: number;
   timestamp: string;
+  timestampMs: number;
   channel: "wallet" | "market";
 }
 
@@ -157,6 +158,7 @@ const mapBinanceTrade = (raw: unknown): LiveTransaction[] => {
       fee: "n/a",
       block: trade.l,
       timestamp: formatClock(trade.T),
+      timestampMs: trade.T,
       channel: "market",
     },
   ];
@@ -318,6 +320,7 @@ const createBitcoinMapper = () => {
           fee: `${feeBtc.toFixed(6)} BTC`,
           block: 0,
           timestamp: formatClock(tx.time * 1000),
+          timestampMs: tx.time * 1000,
           channel: "wallet",
         });
         edgeIndex += 1;
@@ -371,6 +374,7 @@ const mapEvmTx = (
     fee: `${formatWei(feeWei, 6)} ${feeUnit}`,
     block,
     timestamp: formatClock(timestampMsOverride ?? Date.now()),
+    timestampMs: timestampMsOverride ?? Date.now(),
     channel: "wallet",
   };
 };

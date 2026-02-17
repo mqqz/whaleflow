@@ -18,8 +18,10 @@ interface TopNavigationProps {
   network: string;
   token: string;
   status: ConnectionStatus;
+  activeSection: TopNavSection;
   onNetworkChange: (value: string) => void;
   onTokenChange: (value: string) => void;
+  onSectionChange: (section: TopNavSection) => void;
 }
 
 const statusLabel: Record<ConnectionStatus, string> = {
@@ -67,6 +69,8 @@ const sections = [
   { id: "explorer", label: "Explorer" },
 ] as const;
 
+export type TopNavSection = (typeof sections)[number]["id"];
+
 function SelectorIcon({ src, label }: { src: string; label: string }) {
   const [hasError, setHasError] = useState(false);
 
@@ -96,11 +100,11 @@ export function TopNavigation({
   network,
   token,
   status,
+  activeSection,
   onNetworkChange,
   onTokenChange,
+  onSectionChange,
 }: TopNavigationProps) {
-  const [activeSection, setActiveSection] = useState<(typeof sections)[number]["id"]>("monitor");
-
   return (
     <div className="fixed top-0 left-0 right-0 h-16 bg-card/80 backdrop-blur-xl border-b border-border z-50">
       <div className="grid grid-cols-[1fr_auto_1fr] items-center h-full px-6 gap-4">
@@ -272,7 +276,7 @@ export function TopNavigation({
                 <button
                   key={section.id}
                   type="button"
-                  onClick={() => setActiveSection(section.id)}
+                  onClick={() => onSectionChange(section.id)}
                   className={`relative px-4 py-1.5 text-sm transition-colors ${
                     isActive ? "text-foreground" : "text-muted-foreground hover:text-foreground"
                   }`}
