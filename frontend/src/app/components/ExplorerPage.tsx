@@ -39,9 +39,6 @@ interface CounterpartyStat {
 const tokenLabels: Record<string, string> = {
   btc: "BTC",
   eth: "ETH",
-  sol: "SOL",
-  bnb: "BNB",
-  xrp: "XRP",
 };
 
 const parseAmount = (value: string) => {

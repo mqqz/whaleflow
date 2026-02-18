@@ -12,9 +12,6 @@ interface RightSidebarProps {
 const tokenLabels: Record<string, string> = {
   btc: "BTC",
   eth: "ETH",
-  sol: "SOL",
-  bnb: "BNB",
-  xrp: "XRP",
 };
 
 const parseNumeric = (value: string) => {

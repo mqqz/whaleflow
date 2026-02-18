@@ -16,17 +16,11 @@ const WEI_PER_ETH = 1_000_000_000_000_000_000n;
 
 const evmRpcByNetwork: Record<string, string | undefined> = {
   ethereum: "https://ethereum-rpc.publicnode.com",
-  bsc: "https://bsc-rpc.publicnode.com",
-  polygon: "https://polygon-bor-rpc.publicnode.com",
-  arbitrum: "https://arbitrum-one-rpc.publicnode.com",
   bitcoin: undefined,
 };
 
 const feeSymbolByNetwork: Record<string, string> = {
   ethereum: "ETH",
-  bsc: "BNB",
-  polygon: "MATIC",
-  arbitrum: "ETH",
   bitcoin: "BTC",
 };
 

@@ -57,26 +57,11 @@ const BTC_COSPEND_WINDOW_PAIR_EVENTS = 4000;
 const tokenToSymbol: Record<string, string> = {
   btc: "btcusdt",
   eth: "ethusdt",
-  sol: "solusdt",
-  bnb: "bnbusdt",
-  xrp: "xrpusdt",
 };
 
 const evmNetworkConfig: Record<string, { urls: string[]; feeUnit: string }> = {
   ethereum: {
     urls: ["wss://ethereum-rpc.publicnode.com", "wss://eth-mainnet.g.alchemy.com/v2/demo"],
-    feeUnit: "ETH",
-  },
-  bsc: {
-    urls: ["wss://bsc-rpc.publicnode.com"],
-    feeUnit: "BNB",
-  },
-  polygon: {
-    urls: ["wss://polygon-bor-rpc.publicnode.com", "wss://polygon-mainnet.g.alchemy.com/v2/demo"],
-    feeUnit: "MATIC",
-  },
-  arbitrum: {
-    urls: ["wss://arbitrum-one-rpc.publicnode.com", "wss://arb-mainnet.g.alchemy.com/v2/demo"],
     feeUnit: "ETH",
   },
 };

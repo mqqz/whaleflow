@@ -14,11 +14,9 @@ import {
 } from "./ui/select";
 
 interface TopNavigationProps {
-  network: string;
   token: string;
   status: ConnectionStatus;
   activeSection: TopNavSection;
-  onNetworkChange: (value: string) => void;
   onTokenChange: (value: string) => void;
   onSectionChange: (section: TopNavSection) => void;
 }
@@ -46,20 +44,9 @@ const statusBadgeClass: Record<ConnectionStatus, string> = {
 
 const iconPath = (filename: string) => `${import.meta.env.BASE_URL}icons/${filename}`;
 
-const networkMeta = {
-  ethereum: { label: "Ethereum", iconSrc: iconPath("eth.svg") },
-  bitcoin: { label: "Bitcoin", iconSrc: iconPath("btc.svg") },
-  bsc: { label: "BSC", iconSrc: iconPath("bnb.svg") },
-  polygon: { label: "Polygon", iconSrc: iconPath("matic.svg") },
-  arbitrum: { label: "Arbitrum", iconSrc: iconPath("arbitrum.svg") },
-} as const;
-
 const tokenMeta = {
   btc: { label: "BTC", iconSrc: iconPath("btc.svg") },
   eth: { label: "ETH", iconSrc: iconPath("eth.svg") },
-  sol: { label: "SOL", iconSrc: iconPath("sol.svg") },
-  bnb: { label: "BNB", iconSrc: iconPath("bnb.svg") },
-  xrp: { label: "XRP", iconSrc: iconPath("xrp.svg") },
 } as const;
 
 const sections = [
@@ -96,11 +83,9 @@ function SelectorIcon({ src, label }: { src: string; label: string }) {
 }
 
 export function TopNavigation({
-  network,
   token,
   status,
   activeSection,
-  onNetworkChange,
   onTokenChange,
   onSectionChange,
 }: TopNavigationProps) {
@@ -115,88 +100,6 @@ export function TopNavigation({
           </div>
 
           <div className="hidden sm:flex items-center gap-1.5 py-0.5">
-            <div className="h-7 w-px bg-border/60 self-end" />
-
-            <div className="flex flex-col gap-0.5">
-              <span className="text-[9px] leading-none font-medium uppercase tracking-[0.12em] text-muted-foreground">
-                Network
-              </span>
-              <Select value={network} onValueChange={onNetworkChange}>
-                <SelectTrigger
-                  size="sm"
-                  title="Chooses which blockchain's whale transfers are shown"
-                  className="h-7 w-[108px] sm:w-[124px] bg-muted/40 border-border/40 px-2 text-xs hover:bg-muted/70 transition-colors"
-                >
-                  <SelectorIcon
-                    src={
-                      networkMeta[network as keyof typeof networkMeta]?.iconSrc ??
-                      iconPath("eth.svg")
-                    }
-                    label={networkMeta[network as keyof typeof networkMeta]?.label ?? "Network"}
-                  />
-                  <SelectValue placeholder="Network" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectGroup>
-                    <SelectLabel>Data source chain</SelectLabel>
-                    <SelectSeparator />
-                    <SelectItem
-                      value="ethereum"
-                      icon={
-                        <SelectorIcon
-                          src={networkMeta.ethereum.iconSrc}
-                          label={networkMeta.ethereum.label}
-                        />
-                      }
-                    >
-                      {networkMeta.ethereum.label}
-                    </SelectItem>
-                    <SelectItem
-                      value="bitcoin"
-                      icon={
-                        <SelectorIcon
-                          src={networkMeta.bitcoin.iconSrc}
-                          label={networkMeta.bitcoin.label}
-                        />
-                      }
-                    >
-                      {networkMeta.bitcoin.label}
-                    </SelectItem>
-                    <SelectItem
-                      value="bsc"
-                      icon={
-                        <SelectorIcon src={networkMeta.bsc.iconSrc} label={networkMeta.bsc.label} />
-                      }
-                    >
-                      {networkMeta.bsc.label}
-                    </SelectItem>
-                    <SelectItem
-                      value="polygon"
-                      icon={
-                        <SelectorIcon
-                          src={networkMeta.polygon.iconSrc}
-                          label={networkMeta.polygon.label}
-                        />
-                      }
-                    >
-                      {networkMeta.polygon.label}
-                    </SelectItem>
-                    <SelectItem
-                      value="arbitrum"
-                      icon={
-                        <SelectorIcon
-                          src={networkMeta.arbitrum.iconSrc}
-                          label={networkMeta.arbitrum.label}
-                        />
-                      }
-                    >
-                      {networkMeta.arbitrum.label}
-                    </SelectItem>
-                  </SelectGroup>
-                </SelectContent>
-              </Select>
-            </div>
-
             <div className="h-7 w-px bg-border/60 self-end" />
 
             <div className="flex flex-col gap-0.5">
@@ -234,30 +137,6 @@ export function TopNavigation({
                       }
                     >
                       {tokenMeta.eth.label}
-                    </SelectItem>
-                    <SelectItem
-                      value="sol"
-                      icon={
-                        <SelectorIcon src={tokenMeta.sol.iconSrc} label={tokenMeta.sol.label} />
-                      }
-                    >
-                      {tokenMeta.sol.label}
-                    </SelectItem>
-                    <SelectItem
-                      value="bnb"
-                      icon={
-                        <SelectorIcon src={tokenMeta.bnb.iconSrc} label={tokenMeta.bnb.label} />
-                      }
-                    >
-                      {tokenMeta.bnb.label}
-                    </SelectItem>
-                    <SelectItem
-                      value="xrp"
-                      icon={
-                        <SelectorIcon src={tokenMeta.xrp.iconSrc} label={tokenMeta.xrp.label} />
-                      }
-                    >
-                      {tokenMeta.xrp.label}
                     </SelectItem>
                   </SelectGroup>
                 </SelectContent>

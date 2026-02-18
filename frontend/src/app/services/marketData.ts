@@ -19,25 +19,16 @@ interface PriceFeedResult {
 const BINANCE_SYMBOLS: Record<string, string> = {
   btc: "BTCUSDT",
   eth: "ETHUSDT",
-  sol: "SOLUSDT",
-  bnb: "BNBUSDT",
-  xrp: "XRPUSDT",
 };
 
 const COINBASE_PRODUCTS: Record<string, string> = {
   btc: "BTC-USD",
   eth: "ETH-USD",
-  sol: "SOL-USD",
-  bnb: "BNB-USD",
-  xrp: "XRP-USD",
 };
 
 const COINGECKO_IDS: Record<string, string> = {
   btc: "bitcoin",
   eth: "ethereum",
-  sol: "solana",
-  bnb: "binancecoin",
-  xrp: "ripple",
 };
 
 const dedupeAndSort = (candles: PriceCandle[]) => {

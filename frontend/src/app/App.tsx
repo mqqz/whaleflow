@@ -11,8 +11,8 @@ import { ExplorerPage } from "./components/ExplorerPage";
 
 export default function App() {
   const IMPACT_HISTORY_SIZE = 600;
-  const [network, setNetwork] = useState("ethereum");
   const [token, setToken] = useState("eth");
+  const network = token === "btc" ? "bitcoin" : "ethereum";
   const [minAmount, setMinAmount] = useState(1);
   const [maxVisible, setMaxVisible] = useState(20);
   const [pauseStream, setPauseStream] = useState(false);
@@ -42,11 +42,9 @@ export default function App() {
     <div className="min-h-screen bg-background">
       {/* Top Navigation */}
       <TopNavigation
-        network={network}
         token={token}
         status={status}
         activeSection={activeSection}
-        onNetworkChange={setNetwork}
         onTokenChange={setToken}
         onSectionChange={setActiveSection}
       />
