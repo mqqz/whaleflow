@@ -8,6 +8,8 @@ import { Badge } from "./ui/badge";
 import { NetworkGraph } from "./NetworkGraph";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "./ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "./ui/table";
+import { ExplorerWalletData, fetchExplorerWalletData } from "../services/explorerData";
+import { detectAddressTag } from "../data/addressLabels";
 
 interface ExplorerPageProps {
   network: string;
@@ -33,19 +35,6 @@ interface CounterpartyStat {
   txCount: number;
   tag: "exchange" | "contract" | "none";
 }
-
-const EXCHANGE_TERMS = [
-  "exchange",
-  "binance",
-  "coinbase",
-  "kraken",
-  "okx",
-  "bybit",
-  "kucoin",
-  "gate",
-];
-
-const CONTRACT_TERMS = ["contract", "router", "bridge", "vault", "staking", "pool", "swap"];
 
 const tokenLabels: Record<string, string> = {
   btc: "BTC",
@@ -81,11 +70,11 @@ const formatDateTime = (timestampMs: number) =>
   });
 
 const classifyWallet = (wallet: string): "exchange" | "contract" | "none" => {
-  const lower = wallet.toLowerCase();
-  if (EXCHANGE_TERMS.some((term) => lower.includes(term))) {
+  const tag = detectAddressTag(wallet);
+  if (tag === "exchange") {
     return "exchange";
   }
-  if (CONTRACT_TERMS.some((term) => lower.includes(term))) {
+  if (tag === "router" || tag === "bridge" || tag === "contract") {
     return "contract";
   }
   return "none";
@@ -111,6 +100,9 @@ export function ExplorerPage({
   const [tagFilter, setTagFilter] = useState<"all" | "exchange" | "contract" | "none">("all");
   const [sortBy, setSortBy] = useState<"timestamp" | "amount">("timestamp");
   const [sortDirection, setSortDirection] = useState<"asc" | "desc">("desc");
+  const [apiData, setApiData] = useState<ExplorerWalletData | null>(null);
+  const [apiStatus, setApiStatus] = useState<"idle" | "loading" | "ready" | "error">("idle");
+  const [apiError, setApiError] = useState<string | null>(null);
 
   useEffect(() => {
     if (!selectedWallet || selectedWallet === walletAddress) {
@@ -121,15 +113,54 @@ export function ExplorerPage({
   }, [selectedWallet, walletAddress]);
 
   const normalizedWallet = walletAddress.trim();
+  useEffect(() => {
+    if (!normalizedWallet) {
+      setApiData(null);
+      setApiStatus("idle");
+      setApiError(null);
+      return;
+    }
+
+    let active = true;
+    setApiStatus("loading");
+    setApiError(null);
+
+    fetchExplorerWalletData({
+      network,
+      address: normalizedWallet,
+      maxTransactions: 300,
+    })
+      .then((data) => {
+        if (!active) return;
+        setApiData(data);
+        setApiStatus("ready");
+      })
+      .catch(() => {
+        if (!active) return;
+        setApiData(null);
+        setApiStatus("error");
+        setApiError("External explorer sources unavailable; showing live-stream snapshot.");
+      });
+
+    return () => {
+      active = false;
+    };
+  }, [network, normalizedWallet]);
+
+  const sourceTransactions = useMemo(
+    () => (apiData && apiData.transactions.length > 0 ? apiData.transactions : transactions),
+    [apiData, transactions],
+  );
+
   const walletTx = useMemo(
     () =>
-      transactions
+      sourceTransactions
         .filter(
           (tx) =>
             tx.channel === "wallet" && (tx.from === normalizedWallet || tx.to === normalizedWallet),
         )
         .sort((a, b) => b.timestampMs - a.timestampMs),
-    [transactions, normalizedWallet],
+    [sourceTransactions, normalizedWallet],
   );
 
   const rows = useMemo<WalletRow[]>(
@@ -165,11 +196,12 @@ export function ExplorerPage({
       totalReceived,
       totalSent,
       net,
+      balance: apiData?.balance ?? net,
       firstSeenMs,
       lastActiveMs,
       exchangeInteractionPct,
     };
-  }, [rows]);
+  }, [apiData, rows]);
 
   const counterpartyStats = useMemo<CounterpartyStat[]>(() => {
     const byWallet = new Map<string, CounterpartyStat>();
@@ -213,7 +245,9 @@ export function ExplorerPage({
       return [] as LiveTransaction[];
     }
 
-    const recent = transactions.filter((tx) => tx.channel === "wallet").slice(0, 450);
+    const graphSeed =
+      apiData && apiData.transactions.length > 0 ? apiData.transactions : transactions;
+    const recent = graphSeed.filter((tx) => tx.channel === "wallet").slice(0, 450);
 
     const firstHop = new Set<string>();
     for (const tx of recent) {
@@ -243,7 +277,7 @@ export function ExplorerPage({
 
     const include = new Set([normalizedWallet, ...firstHop, ...secondHop]);
     return recent.filter((tx) => include.has(tx.from) && include.has(tx.to));
-  }, [normalizedWallet, transactions]);
+  }, [apiData, normalizedWallet, transactions]);
 
   return (
     <div className="mt-16 px-3 pb-3 pt-3 space-y-3">
@@ -280,6 +314,12 @@ export function ExplorerPage({
               Load Wallet
             </Button>
           </div>
+          <div className="mt-2 text-xs text-muted-foreground">
+            {apiStatus === "loading" ? "Loading external wallet data..." : null}
+            {apiStatus === "ready" ? `Data source: ${apiData?.source ?? "Live stream"}` : null}
+            {apiStatus === "error" ? apiError : null}
+            {apiStatus === "idle" ? "Load a wallet to fetch indexed history and balance." : null}
+          </div>
         </CardContent>
       </Card>
 
@@ -292,7 +332,9 @@ export function ExplorerPage({
             </div>
             <div className="rounded-lg border border-border/60 bg-background/35 p-3">
               <p className="text-[11px] uppercase tracking-wide text-muted-foreground">Balance</p>
-              <p className="mt-1 text-sm font-semibold">{formatAmount(summary.net, tokenLabel)}</p>
+              <p className="mt-1 text-sm font-semibold">
+                {formatAmount(summary.balance, tokenLabel)}
+              </p>
             </div>
             <div className="rounded-lg border border-border/60 bg-background/35 p-3">
               <p className="text-[11px] uppercase tracking-wide text-muted-foreground">

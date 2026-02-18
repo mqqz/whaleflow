@@ -3,6 +3,7 @@ import * as d3 from "d3";
 import { ZoomIn, ZoomOut, Maximize2 } from "lucide-react";
 import { Button } from "./ui/button";
 import { LiveTransaction } from "../hooks/useLiveTransactions";
+import { detectAddressTag } from "../data/addressLabels";
 
 interface GraphNode {
   id: string;
@@ -44,13 +45,17 @@ const isRoleLabel = (value: string) =>
   value.includes("Seller");
 
 const classifyNodeType = (id: string, amount: number): GraphNode["type"] => {
-  const lower = id.toLowerCase();
-
-  if (isRoleLabel(id) || lower.includes("exchange")) {
+  const label = detectAddressTag(id);
+  if (isRoleLabel(id) || label === "exchange") {
     return "exchange";
   }
 
-  if (lower === "unknown" || lower.includes("contract")) {
+  if (
+    id.toLowerCase() === "unknown" ||
+    label === "router" ||
+    label === "bridge" ||
+    label === "contract"
+  ) {
     return "contract";
   }
 

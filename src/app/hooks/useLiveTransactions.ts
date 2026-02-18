@@ -34,6 +34,16 @@ interface StreamConfig {
   feeUnit?: string;
 }
 
+interface MempoolTx {
+  txid?: string;
+  fee?: number;
+  status?: {
+    block_time?: number;
+  };
+  vin?: Array<{ prevout?: { scriptpubkey_address?: string; value?: number } }>;
+  vout?: Array<{ scriptpubkey_address?: string; value?: number }>;
+}
+
 const MAX_BACKOFF_MS = 15000;
 const MAX_QUEUE_SIZE = 200;
 const WHALE_THRESHOLD = 100;
@@ -383,8 +393,8 @@ const getStreamConfig = (network: string, token: string): StreamConfig => {
   if (network === "bitcoin") {
     return {
       kind: "bitcoin",
-      urls: ["wss://ws.blockchain.info/inv"],
-      onOpenPayloads: [JSON.stringify({ op: "unconfirmed_sub" })],
+      urls: ["https://mempool.space/api"],
+      onOpenPayloads: [],
       mapper: createBitcoinMapper(),
     };
   }
@@ -698,6 +708,94 @@ export function useLiveTransactions({
         reconnectTimerRef.current = window.setTimeout(connect, backoffMs);
       };
     };
+
+    if (stream.kind === "bitcoin") {
+      const mapBitcoin = stream.mapper;
+      const seenTxIds = new Set<string>();
+      let pollTimer: number | null = null;
+
+      const toLegacyEnvelope = (tx: MempoolTx) => ({
+        op: "utx",
+        x: {
+          hash: tx.txid,
+          time: tx.status?.block_time ?? Math.floor(Date.now() / 1000),
+          inputs: (Array.isArray(tx.vin) ? tx.vin : []).map((input) => ({
+            prev_out: {
+              addr: input.prevout?.scriptpubkey_address,
+              value: input.prevout?.value,
+            },
+          })),
+          out: (Array.isArray(tx.vout) ? tx.vout : []).map((output) => ({
+            addr: output.scriptpubkey_address,
+            value: output.value,
+          })),
+        },
+      });
+
+      const poll = async () => {
+        if (disposed) return;
+        try {
+          const recentResp = await fetch("https://mempool.space/api/mempool/recent");
+          if (!recentResp.ok) {
+            throw new Error("recent fetch failed");
+          }
+          const recent = (await recentResp.json()) as Array<{ txid?: string }>;
+          const txids = (Array.isArray(recent) ? recent : [])
+            .map((row) => row.txid)
+            .filter((txid): txid is string => typeof txid === "string")
+            .slice(0, 8);
+
+          const newTxids = txids.filter((txid) => !seenTxIds.has(txid));
+          if (newTxids.length === 0) {
+            setStatus("live");
+            return;
+          }
+
+          const txResponses = await Promise.all(
+            newTxids.map(async (txid) => {
+              try {
+                const txResp = await fetch(`https://mempool.space/api/tx/${txid}`);
+                if (!txResp.ok) return null;
+                const tx = (await txResp.json()) as MempoolTx;
+                return tx;
+              } catch {
+                return null;
+              }
+            }),
+          );
+
+          for (const tx of txResponses) {
+            if (!tx?.txid) continue;
+            seenTxIds.add(tx.txid);
+            enqueueIfPassesFilters(mapBitcoin(toLegacyEnvelope(tx)));
+          }
+          if (seenTxIds.size > 500) {
+            const keep = [...seenTxIds].slice(-250);
+            seenTxIds.clear();
+            keep.forEach((id) => seenTxIds.add(id));
+          }
+
+          setStatus("live");
+        } catch {
+          if (!disposed) {
+            setStatus("reconnecting");
+          }
+        }
+      };
+
+      setStatus("connecting");
+      void poll();
+      pollTimer = window.setInterval(() => {
+        void poll();
+      }, 3500);
+
+      return () => {
+        disposed = true;
+        if (pollTimer !== null) {
+          window.clearInterval(pollTimer);
+        }
+      };
+    }
 
     connect();
 

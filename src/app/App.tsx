@@ -102,7 +102,7 @@ export default function App() {
         </div>
       )}
 
-      {activeSection === "impact" && <ImpactPage transactions={transactions} />}
+      {activeSection === "impact" && <ImpactPage token={token} transactions={transactions} />}
 
       {activeSection === "explorer" && (
         <ExplorerPage

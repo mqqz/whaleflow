@@ -3,16 +3,14 @@ import * as d3 from "d3";
 import { LiveTransaction } from "../hooks/useLiveTransactions";
 import { Card, CardContent, CardHeader, CardTitle } from "./ui/card";
 import { Button } from "./ui/button";
+import { fetchPriceCandlesWithFallback, PriceCandle, CandleInterval } from "../services/marketData";
+import { isExchangeAddress } from "../data/addressLabels";
 
 type TimeRange = "1h" | "6h" | "24h" | "7d";
 
 interface ImpactPageProps {
+  token: string;
   transactions: LiveTransaction[];
-}
-
-interface PriceCandle {
-  ts: number;
-  close: number;
 }
 
 interface BucketPoint {
@@ -26,7 +24,7 @@ interface BucketPoint {
   ret: number;
 }
 
-const RANGE_CONFIG: Record<TimeRange, { label: string; ms: number; interval: "1m" | "5m" }> = {
+const RANGE_CONFIG: Record<TimeRange, { label: string; ms: number; interval: CandleInterval }> = {
   "1h": { label: "1H", ms: 60 * 60 * 1000, interval: "1m" },
   "6h": { label: "6H", ms: 6 * 60 * 60 * 1000, interval: "1m" },
   "24h": { label: "24H", ms: 24 * 60 * 60 * 1000, interval: "5m" },
@@ -43,24 +41,6 @@ const PAD_TOP = 16;
 const PAD_RIGHT = 16;
 const PAD_BOTTOM = 24;
 const PAD_LEFT = 38;
-
-const EXCHANGE_TERMS = [
-  "exchange",
-  "binance",
-  "coinbase",
-  "kraken",
-  "okx",
-  "bybit",
-  "router",
-  "bridge",
-  "uniswap",
-  "sushi",
-];
-
-const intervalToMs: Record<"1m" | "5m", number> = {
-  "1m": 60_000,
-  "5m": 300_000,
-};
 
 const parseAmount = (amount: string) => {
   const parsed = Number.parseFloat(amount);
@@ -103,11 +83,6 @@ const movementStyle = (pct: number | null) => {
   return { symbol: "▼", className: "text-destructive", text: `${pct.toFixed(1)}%` };
 };
 
-const isExchangeLike = (wallet: string) => {
-  const lower = wallet.toLowerCase();
-  return EXCHANGE_TERMS.some((term) => lower.includes(term));
-};
-
 const stdDev = (values: number[]) => {
   if (values.length < 2) {
     return 0;
@@ -140,39 +115,6 @@ const nearestClose = (candles: PriceCandle[], ts: number) => {
   return candles[Math.max(0, Math.min(idx, candles.length - 1))]?.close ?? 0;
 };
 
-async function fetchPriceCandles(range: TimeRange): Promise<PriceCandle[]> {
-  const { ms, interval } = RANGE_CONFIG[range];
-  const now = Date.now();
-  const start = now - ms;
-  const stepMs = intervalToMs[interval];
-  const out: PriceCandle[] = [];
-  let cursor = start;
-
-  for (let i = 0; i < 6 && cursor < now; i += 1) {
-    const query = new URLSearchParams({
-      symbol: "ETHUSDT",
-      interval,
-      startTime: String(cursor),
-      endTime: String(now),
-      limit: "1000",
-    });
-    const resp = await fetch(`https://api.binance.com/api/v3/klines?${query.toString()}`);
-    if (!resp.ok) {
-      throw new Error(`price fetch failed: ${resp.status}`);
-    }
-    const rows = (await resp.json()) as Array<[number, string, string, string, string]>;
-    if (rows.length === 0) {
-      break;
-    }
-    out.push(...rows.map((row) => ({ ts: row[0], close: Number(row[4]) })));
-    cursor = (rows.at(-1)?.[0] ?? now) + stepMs;
-  }
-
-  const deduped = new Map<number, PriceCandle>();
-  out.forEach((candle) => deduped.set(candle.ts, candle));
-  return [...deduped.values()].sort((a, b) => a.ts - b.ts);
-}
-
 function useElementSize<T extends HTMLElement>() {
   const ref = useRef<T | null>(null);
   const [size, setSize] = useState({ width: 0, height: 0 });
@@ -202,6 +144,7 @@ function PriceImpactD3Chart({
   whaleMarkers,
   inflowSpikes,
   outflowSpikes,
+  tokenLabel,
   width,
   height,
 }: {
@@ -209,6 +152,7 @@ function PriceImpactD3Chart({
   whaleMarkers: Array<{ ts: number; value: number }>;
   inflowSpikes: number[];
   outflowSpikes: number[];
+  tokenLabel: string;
   width: number;
   height: number;
 }) {
@@ -349,7 +293,7 @@ function PriceImpactD3Chart({
             {new Date(hover.ts).toLocaleString()}
           </text>
           <text x={W - 178} y={44} fill="#93C5FD" fontSize="11">
-            ETH ${hover.close.toFixed(2)}
+            {tokenLabel} ${hover.close.toFixed(2)}
           </text>
         </>
       ) : null}
@@ -654,27 +598,37 @@ function WhaleD3Chart({
   );
 }
 
-export function ImpactPage({ transactions }: ImpactPageProps) {
+export function ImpactPage({ token, transactions }: ImpactPageProps) {
   const [priceRef, priceSize] = useElementSize<HTMLDivElement>();
   const [flowRef, flowSize] = useElementSize<HTMLDivElement>();
   const [whaleRef, whaleSize] = useElementSize<HTMLDivElement>();
 
   const [range, setRange] = useState<TimeRange>("24h");
   const [candles, setCandles] = useState<PriceCandle[]>([]);
+  const [priceSource, setPriceSource] = useState("Unavailable");
   const [loading, setLoading] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
+  const tokenLabel = token.toUpperCase();
 
   useEffect(() => {
     let active = true;
     setLoading(true);
     setLoadError(null);
-    fetchPriceCandles(range)
+    fetchPriceCandlesWithFallback({
+      token,
+      rangeMs: RANGE_CONFIG[range].ms,
+      interval: RANGE_CONFIG[range].interval,
+    })
       .then((next) => {
-        if (active) setCandles(next);
+        if (active) {
+          setCandles(next.candles);
+          setPriceSource(next.source);
+        }
       })
       .catch(() => {
         if (active) {
           setCandles([]);
+          setPriceSource("Unavailable");
           setLoadError("Price feed unavailable");
         }
       })
@@ -684,7 +638,7 @@ export function ImpactPage({ transactions }: ImpactPageProps) {
     return () => {
       active = false;
     };
-  }, [range]);
+  }, [range, token]);
 
   const windowStart = Date.now() - RANGE_CONFIG[range].ms;
 
@@ -723,8 +677,8 @@ export function ImpactPage({ transactions }: ImpactPageProps) {
       if (!current) continue;
 
       const amount = parseAmount(tx.amount);
-      const toExchange = isExchangeLike(tx.to);
-      const fromExchange = isExchangeLike(tx.from);
+      const toExchange = isExchangeAddress(tx.to);
+      const fromExchange = isExchangeAddress(tx.from);
 
       if (toExchange && !fromExchange) {
         current.inflow += amount;
@@ -909,7 +863,7 @@ export function ImpactPage({ transactions }: ImpactPageProps) {
 
       <Card className="bg-card/60 border-border/60 h-[430px]">
         <CardHeader className="flex-row items-center justify-between space-y-0 pb-3">
-          <CardTitle>ETH Price + Flow Impact</CardTitle>
+          <CardTitle>{tokenLabel} Price + Flow Impact</CardTitle>
           <div className="flex items-center gap-1">
             {(Object.keys(RANGE_CONFIG) as TimeRange[]).map((key) => (
               <Button
@@ -931,15 +885,19 @@ export function ImpactPage({ transactions }: ImpactPageProps) {
               whaleMarkers={whaleMarkers}
               inflowSpikes={spikeData.inflow}
               outflowSpikes={spikeData.outflow}
+              tokenLabel={tokenLabel}
               width={priceSize.width}
               height={priceSize.height}
             />
           </div>
           {(loading || loadError) && (
             <p className="mt-1 px-4 text-xs text-muted-foreground">
-              {loading ? "Loading ETH candles..." : loadError}
+              {loading ? `Loading ${tokenLabel} candles...` : loadError}
             </p>
           )}
+          {!loading && !loadError ? (
+            <p className="mt-1 px-4 text-xs text-muted-foreground">Price source: {priceSource}</p>
+          ) : null}
         </CardContent>
       </Card>
 
