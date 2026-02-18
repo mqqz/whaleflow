@@ -1,0 +1,17 @@
+[project]
+name = "backend"
+version = "0.1.0"
+requires-python = ">=3.11"
+dependencies = [
+    "aiohttp>=3.12.15",
+    "fastapi>=0.129.0",
+    "pandas>=3.0.1",
+    "psycopg2-binary>=2.9.11",
+    "python-dotenv>=1.2.1",
+    "tqdm>=4.67.1",
+    "uvicorn>=0.41.0",
+    "web3>=7.14.1",
+]
+
+[tool.pyright]
+typeCheckingMode = "off"
