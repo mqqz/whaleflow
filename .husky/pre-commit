@@ -1,10 +1,10 @@
-pnpm -C frontend lint-staged
+pnpm lint-staged
 
-PY_FILES=$(git diff --cached --name-only --diff-filter=ACMR | rg '\.py$' || true)
-
-if [ -n "$PY_FILES" ]; then
-  echo "Running Ruff on staged Python files..."
-  echo "$PY_FILES" | xargs uvx ruff check --fix
-  echo "$PY_FILES" | xargs uvx ruff format
-  echo "$PY_FILES" | xargs git add
-fi
+# PY_FILES=$(git diff --cached --name-only --diff-filter=ACMR | rg '\.py$' || true)
+# 
+# if [ -n "$PY_FILES" ]; then
+#   echo "Running Ruff on staged Python files..."
+#   echo "$PY_FILES" | xargs uvx ruff check --fix
+#   echo "$PY_FILES" | xargs uvx ruff format
+#   echo "$PY_FILES" | xargs git add
+# fi

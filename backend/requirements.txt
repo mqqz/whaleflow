@@ -1,8 +1,0 @@
-fastapi
-uvicorn
-web3
-psycopg2-binary
-python-dotenv
-pandas
-aiohttp
-tqdm
