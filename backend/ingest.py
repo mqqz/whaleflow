@@ -1,5 +1,6 @@
 import asyncio
 import json
+import logging
 import os
 import time
 from datetime import datetime, timezone
@@ -9,10 +10,11 @@ import aiohttp
 from dotenv import load_dotenv
 from web3 import Web3
 
-from backend.db import get_conn
+from db import get_conn
 
 BASE_DIR = Path(__file__).resolve().parent
 load_dotenv()
+logger = logging.getLogger("ingest")
 
 eth_rpc_url = os.getenv("ETH_RPC_URL")
 if not eth_rpc_url:
@@ -29,6 +31,11 @@ with (BASE_DIR / "exchange_list.json").open() as f:
 
 eth_exchanges = {addr.lower() for addr in exchange_config.get("ethereum", {}).keys()}
 btc_exchanges = set(exchange_config.get("bitcoin", {}).keys())
+
+if not btc_exchanges:
+    raise RuntimeError(
+        "exchange_list.json must include a non-empty 'bitcoin' exchange address map"
+    )
 
 
 def load_threshold(chain: str, default_value: float = 100.0) -> float:
@@ -168,6 +175,7 @@ async def eth_live_loop():
                 upsert_bucket_stats(rows)
                 last_block = latest
         except Exception:
+            logger.exception("ETH live ingestion error")
             await asyncio.sleep(3)
             continue
 
@@ -213,32 +221,39 @@ async def btc_live_loop():
                         for tx in block.get("tx", []):
                             if not isinstance(tx, dict):
                                 continue
-                            amount = 0.0
-                            out_addresses: set[str] = set()
-                            in_addresses: set[str] = set()
+                            total_amount = 0.0
+                            tx_exchange_inflow = 0.0
+                            tx_exchange_outflow = 0.0
 
                             for vout in tx.get("vout", []):
                                 if not isinstance(vout, dict):
                                     continue
                                 value = vout.get("value")
-                                if isinstance(value, (int, float)):
-                                    amount += float(value)
-                                out_addresses.update(
-                                    parse_btc_addresses_from_vout(vout)
-                                )
+                                if not isinstance(value, (int, float)):
+                                    continue
+                                value_f = float(value)
+                                total_amount += value_f
+                                out_addresses = parse_btc_addresses_from_vout(vout)
+                                if any(a in btc_exchanges for a in out_addresses):
+                                    tx_exchange_inflow += value_f
 
                             for vin in tx.get("vin", []):
                                 if isinstance(vin, dict):
-                                    in_addresses.update(
-                                        parse_btc_addresses_from_vin(vin)
-                                    )
+                                    in_addresses = parse_btc_addresses_from_vin(vin)
+                                    prevout = vin.get("prevout")
+                                    if not isinstance(prevout, dict):
+                                        continue
+                                    value = prevout.get("value")
+                                    if not isinstance(value, (int, float)):
+                                        continue
+                                    if any(a in btc_exchanges for a in in_addresses):
+                                        tx_exchange_outflow += float(value)
 
-                            if any(a in btc_exchanges for a in out_addresses):
-                                exchange_inflow += amount
-                            if any(a in btc_exchanges for a in in_addresses):
-                                exchange_outflow += amount
-                            if amount >= whale_threshold:
-                                whale_volume += amount
+                            exchange_inflow += tx_exchange_inflow
+                            exchange_outflow += tx_exchange_outflow
+
+                            if total_amount >= whale_threshold:
+                                whale_volume += total_amount
                                 whale_count += 1
                             tx_count += 1
 
@@ -258,6 +273,7 @@ async def btc_live_loop():
                     upsert_bucket_stats(rows)
                     last_block = latest
             except Exception:
+                logger.exception("BTC live ingestion error")
                 await asyncio.sleep(3)
                 continue
 

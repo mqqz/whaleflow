@@ -1,5 +1,5 @@
 import pandas as pd
-from backend.db import get_conn
+from db import get_conn
 
 
 def compute_volatility(window=12):

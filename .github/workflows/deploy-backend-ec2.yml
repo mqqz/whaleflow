@@ -72,5 +72,5 @@ jobs:
               sudo systemctl is-active "$BACKEND_SERVICE"
             else
               echo "Systemd service ${BACKEND_SERVICE}.service not found."
-              echo "Create it to enable managed restarts (recommended)."
+              exit 1
             fi
