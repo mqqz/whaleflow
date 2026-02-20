@@ -22,12 +22,12 @@ function KpiCard({ title, value, valueClassName, deltaPct, subtitle }: KpiCardPr
   const move = movementStyle(deltaPct);
   return (
     <Card className="bg-card/60 border-border/60 h-[150px] rounded-xl">
-      <CardHeader className="px-4 pt-3 pb-1">
-        <CardTitle className="text-xs text-muted-foreground uppercase tracking-[0.12em] text-center">
+      <CardHeader className="px-4 pt-3 pb-0">
+        <CardTitle className="text-xs text-muted-foreground uppercase tracking-[0.12em] text-center translate-y-1">
           {title}
         </CardTitle>
       </CardHeader>
-      <CardContent className="flex-1 w-full px-3 pb-3 flex flex-col items-center justify-center text-center gap-2">
+      <CardContent className="flex-1 w-full px-3 pb-3 flex flex-col items-center justify-center text-center gap-1.5">
         <p className={`text-4xl font-semibold leading-none ${valueClassName ?? ""}`}>{value}</p>
         <p className={`text-xs font-medium inline-flex items-center gap-1 ${move.className}`}>
           <span>{move.symbol}</span>

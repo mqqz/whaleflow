@@ -1,4 +1,3 @@
-import { useEffect, useMemo, useState } from "react";
 import { ArrowDownUp, Search } from "lucide-react";
 import { LiveTransaction } from "../hooks/useLiveTransactions";
 import { Button } from "./ui/button";
@@ -8,8 +7,7 @@ import { Badge } from "./ui/badge";
 import { NetworkGraph } from "./NetworkGraph";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "./ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "./ui/table";
-import { ExplorerWalletData, fetchExplorerWalletData } from "../services/explorerData";
-import { detectAddressTag } from "../data/addressLabels";
+import { WalletTag, useExploreModel } from "../hooks/useExploreModel";
 
 interface ExplorerPageProps {
   network: string;
@@ -19,32 +17,11 @@ interface ExplorerPageProps {
   onWalletSelect: (wallet: string) => void;
 }
 
-interface WalletRow {
-  tx: LiveTransaction;
-  amount: number;
-  direction: "in" | "out";
-  counterparty: string;
-  tag: "exchange" | "contract" | "none";
+interface SummaryCardItem {
+  label: string;
+  value: string;
+  valueClassName?: string;
 }
-
-interface CounterpartyStat {
-  wallet: string;
-  inflow: number;
-  outflow: number;
-  total: number;
-  txCount: number;
-  tag: "exchange" | "contract" | "none";
-}
-
-const tokenLabels: Record<string, string> = {
-  btc: "BTC",
-  eth: "ETH",
-};
-
-const parseAmount = (value: string) => {
-  const parsed = Number.parseFloat(value);
-  return Number.isFinite(parsed) ? parsed : 0;
-};
 
 const shortWallet = (wallet: string) => {
   if (wallet.length <= 14) return wallet;
@@ -66,18 +43,7 @@ const formatDateTime = (timestampMs: number) =>
     minute: "2-digit",
   });
 
-const classifyWallet = (wallet: string): "exchange" | "contract" | "none" => {
-  const tag = detectAddressTag(wallet);
-  if (tag === "exchange") {
-    return "exchange";
-  }
-  if (tag === "router" || tag === "bridge" || tag === "contract") {
-    return "contract";
-  }
-  return "none";
-};
-
-const tagBadgeClass: Record<WalletRow["tag"], string> = {
+const tagBadgeClass: Record<WalletTag, string> = {
   exchange: "bg-amber-500/15 text-amber-500 border-amber-500/30",
   contract: "bg-sky-500/15 text-sky-400 border-sky-500/30",
   none: "bg-muted/40 text-muted-foreground border-border",
@@ -90,191 +56,83 @@ export function ExplorerPage({
   selectedWallet,
   onWalletSelect,
 }: ExplorerPageProps) {
-  const tokenLabel = tokenLabels[token] ?? token.toUpperCase();
-  const [searchValue, setSearchValue] = useState(selectedWallet ?? "");
-  const [walletAddress, setWalletAddress] = useState(selectedWallet ?? "");
-  const [directionFilter, setDirectionFilter] = useState<"all" | "in" | "out">("all");
-  const [tagFilter, setTagFilter] = useState<"all" | "exchange" | "contract" | "none">("all");
-  const [sortBy, setSortBy] = useState<"timestamp" | "amount">("timestamp");
-  const [sortDirection, setSortDirection] = useState<"asc" | "desc">("desc");
-  const [apiData, setApiData] = useState<ExplorerWalletData | null>(null);
-  const [apiStatus, setApiStatus] = useState<"idle" | "loading" | "ready" | "error">("idle");
-  const [apiError, setApiError] = useState<string | null>(null);
+  const model = useExploreModel({
+    network,
+    token,
+    transactions,
+    selectedWallet,
+    onWalletSelect,
+  });
 
-  useEffect(() => {
-    if (!selectedWallet || selectedWallet === walletAddress) {
-      return;
-    }
-    setSearchValue(selectedWallet);
-    setWalletAddress(selectedWallet);
-  }, [selectedWallet, walletAddress]);
-
-  const normalizedWallet = walletAddress.trim();
-  useEffect(() => {
-    if (!normalizedWallet) {
-      setApiData(null);
-      setApiStatus("idle");
-      setApiError(null);
-      return;
-    }
-
-    let active = true;
-    setApiStatus("loading");
-    setApiError(null);
-
-    fetchExplorerWalletData({
-      network,
-      address: normalizedWallet,
-      maxTransactions: 300,
-    })
-      .then((data) => {
-        if (!active) return;
-        setApiData(data);
-        setApiStatus("ready");
-      })
-      .catch(() => {
-        if (!active) return;
-        setApiData(null);
-        setApiStatus("error");
-        setApiError("External explorer sources unavailable; showing live-stream snapshot.");
-      });
-
-    return () => {
-      active = false;
-    };
-  }, [network, normalizedWallet]);
-
-  const sourceTransactions = useMemo(
-    () => (apiData && apiData.transactions.length > 0 ? apiData.transactions : transactions),
-    [apiData, transactions],
-  );
-
-  const walletTx = useMemo(
-    () =>
-      sourceTransactions
-        .filter(
-          (tx) =>
-            tx.channel === "wallet" && (tx.from === normalizedWallet || tx.to === normalizedWallet),
-        )
-        .sort((a, b) => b.timestampMs - a.timestampMs),
-    [sourceTransactions, normalizedWallet],
-  );
-
-  const rows = useMemo<WalletRow[]>(
-    () =>
-      walletTx.map((tx) => {
-        const amount = parseAmount(tx.amount);
-        const direction = tx.to === normalizedWallet ? "in" : "out";
-        const counterparty = direction === "in" ? tx.from : tx.to;
-        return {
-          tx,
-          amount,
-          direction,
-          counterparty,
-          tag: classifyWallet(counterparty),
-        };
-      }),
-    [walletTx, normalizedWallet],
-  );
-
-  const summary = useMemo(() => {
-    const totalReceived = rows
-      .filter((row) => row.direction === "in")
-      .reduce((sum, row) => sum + row.amount, 0);
-    const totalSent = rows
-      .filter((row) => row.direction === "out")
-      .reduce((sum, row) => sum + row.amount, 0);
-    const net = totalReceived - totalSent;
-    const exchangeCount = rows.filter((row) => row.tag === "exchange").length;
-    const exchangeInteractionPct = rows.length === 0 ? 0 : (exchangeCount / rows.length) * 100;
-    const firstSeenMs = rows.at(-1)?.tx.timestampMs ?? null;
-    const lastActiveMs = rows[0]?.tx.timestampMs ?? null;
-    return {
-      totalReceived,
-      totalSent,
-      net,
-      balance: apiData?.balance ?? net,
-      firstSeenMs,
-      lastActiveMs,
-      exchangeInteractionPct,
-    };
-  }, [apiData, rows]);
-
-  const counterpartyStats = useMemo<CounterpartyStat[]>(() => {
-    const byWallet = new Map<string, CounterpartyStat>();
-    for (const row of rows) {
-      const current = byWallet.get(row.counterparty) ?? {
-        wallet: row.counterparty,
-        inflow: 0,
-        outflow: 0,
-        total: 0,
-        txCount: 0,
-        tag: row.tag,
-      };
-      if (row.direction === "in") {
-        current.inflow += row.amount;
-      } else {
-        current.outflow += row.amount;
-      }
-      current.total += row.amount;
-      current.txCount += 1;
-      byWallet.set(row.counterparty, current);
-    }
-    return [...byWallet.values()].sort((a, b) => b.total - a.total);
-  }, [rows]);
-
-  const filteredRows = useMemo(() => {
-    const byFilter = rows.filter((row) => {
-      if (directionFilter !== "all" && row.direction !== directionFilter) return false;
-      if (tagFilter !== "all" && row.tag !== tagFilter) return false;
-      return true;
-    });
-    const sorted = [...byFilter].sort((a, b) => {
-      const factor = sortDirection === "asc" ? 1 : -1;
-      if (sortBy === "amount") return (a.amount - b.amount) * factor;
-      return (a.tx.timestampMs - b.tx.timestampMs) * factor;
-    });
-    return sorted;
-  }, [rows, directionFilter, tagFilter, sortBy, sortDirection]);
-
-  const egoTransactions = useMemo(() => {
-    if (!normalizedWallet) {
-      return [] as LiveTransaction[];
-    }
-
-    const graphSeed =
-      apiData && apiData.transactions.length > 0 ? apiData.transactions : transactions;
-    const recent = graphSeed.filter((tx) => tx.channel === "wallet").slice(0, 450);
-
-    const firstHop = new Set<string>();
-    for (const tx of recent) {
-      if (tx.from === normalizedWallet) {
-        firstHop.add(tx.to);
-      } else if (tx.to === normalizedWallet) {
-        firstHop.add(tx.from);
-      }
-    }
-
-    const secondHop = new Set<string>();
-    for (const tx of recent) {
-      if (tx.from === normalizedWallet || tx.to === normalizedWallet) {
-        continue;
-      }
-      const fromIsHop1 = firstHop.has(tx.from);
-      const toIsHop1 = firstHop.has(tx.to);
-      if (!fromIsHop1 && !toIsHop1) {
-        continue;
-      }
-      const candidate = fromIsHop1 ? tx.to : tx.from;
-      if (candidate === normalizedWallet || firstHop.has(candidate)) {
-        continue;
-      }
-      secondHop.add(candidate);
-    }
-
-    const include = new Set([normalizedWallet, ...firstHop, ...secondHop]);
-    return recent.filter((tx) => include.has(tx.from) && include.has(tx.to));
-  }, [apiData, normalizedWallet, transactions]);
+  const summaryCards: SummaryCardItem[] = [
+    {
+      label: "Address",
+      value: model.normalizedWallet || "--",
+      valueClassName: "font-mono",
+    },
+    {
+      label: "Balance",
+      value: formatAmount(model.summary.balance, model.tokenLabel),
+      valueClassName: "font-semibold",
+    },
+    {
+      label: "Total Received",
+      value: formatAmount(model.summary.totalReceived, model.tokenLabel),
+      valueClassName: "font-semibold text-success",
+    },
+    {
+      label: "Total Sent",
+      value: formatAmount(model.summary.totalSent, model.tokenLabel),
+      valueClassName: "font-semibold text-destructive",
+    },
+    {
+      label: "Net Position",
+      value: `${model.summary.net >= 0 ? "+" : "-"}${formatAmount(Math.abs(model.summary.net), model.tokenLabel)}`,
+      valueClassName: `font-semibold ${model.summary.net >= 0 ? "text-success" : "text-destructive"}`,
+    },
+    {
+      label: "First Seen",
+      value: model.summary.firstSeenMs === null ? "--" : formatDateTime(model.summary.firstSeenMs),
+    },
+    {
+      label: "Last Active",
+      value:
+        model.summary.lastActiveMs === null ? "--" : formatDateTime(model.summary.lastActiveMs),
+    },
+    {
+      label: "Exchange Interaction %",
+      value: `${model.summary.exchangeInteractionPct.toFixed(1)}%`,
+      valueClassName: "font-semibold",
+    },
+    {
+      label: "Net Exchange Interaction (24H)",
+      value: model.edgeSummary.available
+        ? `${model.edgeSummary.netExchangeInteraction >= 0 ? "+" : "-"}${formatAmount(Math.abs(model.edgeSummary.netExchangeInteraction), model.tokenLabel)}`
+        : "n/a",
+      valueClassName: `font-semibold ${
+        model.edgeSummary.netExchangeInteraction >= 0 ? "text-success" : "text-destructive"
+      }`,
+    },
+    {
+      label: "Sent To Exchanges (24H)",
+      value: model.edgeSummary.available
+        ? formatAmount(model.edgeSummary.sentToExchanges, model.tokenLabel)
+        : "n/a",
+      valueClassName: "font-semibold text-destructive",
+    },
+    {
+      label: "Received From Exchanges (24H)",
+      value: model.edgeSummary.available
+        ? formatAmount(model.edgeSummary.receivedFromExchanges, model.tokenLabel)
+        : "n/a",
+      valueClassName: "font-semibold text-success",
+    },
+    {
+      label: "Exchange Share Of Volume",
+      value: model.edgeSummary.available ? `${model.edgeSummary.pctOfObserved.toFixed(1)}%` : "n/a",
+      valueClassName: "font-semibold",
+    },
+  ];
 
   return (
     <div className="mt-16 px-3 pb-3 pt-3 space-y-3">
@@ -284,38 +142,28 @@ export function ExplorerPage({
             <div className="relative flex-1">
               <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
               <Input
-                value={searchValue}
-                onChange={(event) => setSearchValue(event.target.value)}
+                value={model.searchValue}
+                onChange={(event) => model.setSearchValue(event.target.value)}
                 onKeyDown={(event) => {
                   if (event.key === "Enter") {
-                    const next = searchValue.trim();
-                    if (next) {
-                      setWalletAddress(next);
-                      onWalletSelect(next);
-                    }
+                    model.loadSearchWallet();
                   }
                 }}
                 className="pl-9 font-mono"
                 placeholder="Paste wallet address..."
               />
             </div>
-            <Button
-              type="button"
-              onClick={() => {
-                const next = searchValue.trim();
-                if (!next) return;
-                setWalletAddress(next);
-                onWalletSelect(next);
-              }}
-            >
+            <Button type="button" onClick={model.loadSearchWallet}>
               Load Wallet
             </Button>
           </div>
           <div className="mt-2 text-xs text-muted-foreground">
-            {apiStatus === "loading" ? "Loading external wallet data..." : null}
-            {apiStatus === "ready" ? `Data source: ${apiData?.source ?? "Live stream"}` : null}
-            {apiStatus === "error" ? apiError : null}
-            {apiStatus === "idle" ? "Load a wallet to fetch indexed history and balance." : null}
+            {model.apiStatus === "loading" ? "Loading external wallet data..." : null}
+            {model.apiStatus === "ready" ? `Data source: ${model.apiDataSource}` : null}
+            {model.apiStatus === "error" ? model.apiError : null}
+            {model.apiStatus === "idle"
+              ? "Load a wallet to fetch indexed history and balance."
+              : null}
           </div>
         </CardContent>
       </Card>
@@ -323,79 +171,27 @@ export function ExplorerPage({
       <Card className="bg-card/60 border-border/60">
         <CardContent className="pt-6">
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
-            <div className="rounded-lg border border-border/60 bg-background/35 p-3">
-              <p className="text-[11px] uppercase tracking-wide text-muted-foreground">Address</p>
-              <p className="mt-1 font-mono text-sm">{normalizedWallet || "--"}</p>
-            </div>
-            <div className="rounded-lg border border-border/60 bg-background/35 p-3">
-              <p className="text-[11px] uppercase tracking-wide text-muted-foreground">Balance</p>
-              <p className="mt-1 text-sm font-semibold">
-                {formatAmount(summary.balance, tokenLabel)}
-              </p>
-            </div>
-            <div className="rounded-lg border border-border/60 bg-background/35 p-3">
-              <p className="text-[11px] uppercase tracking-wide text-muted-foreground">
-                Total Received
-              </p>
-              <p className="mt-1 text-sm font-semibold text-success">
-                {formatAmount(summary.totalReceived, tokenLabel)}
-              </p>
-            </div>
-            <div className="rounded-lg border border-border/60 bg-background/35 p-3">
-              <p className="text-[11px] uppercase tracking-wide text-muted-foreground">
-                Total Sent
-              </p>
-              <p className="mt-1 text-sm font-semibold text-destructive">
-                {formatAmount(summary.totalSent, tokenLabel)}
-              </p>
-            </div>
-            <div className="rounded-lg border border-border/60 bg-background/35 p-3">
-              <p className="text-[11px] uppercase tracking-wide text-muted-foreground">
-                Net Position
-              </p>
-              <p
-                className={`mt-1 text-sm font-semibold ${
-                  summary.net >= 0 ? "text-success" : "text-destructive"
-                }`}
+            {summaryCards.map((item) => (
+              <div
+                key={item.label}
+                className="rounded-lg border border-border/60 bg-background/35 p-3"
               >
-                {summary.net >= 0 ? "+" : "-"}
-                {formatAmount(Math.abs(summary.net), tokenLabel)}
-              </p>
-            </div>
-            <div className="rounded-lg border border-border/60 bg-background/35 p-3">
-              <p className="text-[11px] uppercase tracking-wide text-muted-foreground">
-                First Seen
-              </p>
-              <p className="mt-1 text-sm">
-                {summary.firstSeenMs === null ? "--" : formatDateTime(summary.firstSeenMs)}
-              </p>
-            </div>
-            <div className="rounded-lg border border-border/60 bg-background/35 p-3">
-              <p className="text-[11px] uppercase tracking-wide text-muted-foreground">
-                Last Active
-              </p>
-              <p className="mt-1 text-sm">
-                {summary.lastActiveMs === null ? "--" : formatDateTime(summary.lastActiveMs)}
-              </p>
-            </div>
-            <div className="rounded-lg border border-border/60 bg-background/35 p-3">
-              <p className="text-[11px] uppercase tracking-wide text-muted-foreground">
-                Exchange Interaction %
-              </p>
-              <p className="mt-1 text-sm font-semibold">
-                {summary.exchangeInteractionPct.toFixed(1)}%
-              </p>
-            </div>
+                <p className="text-[11px] uppercase tracking-wide text-muted-foreground">
+                  {item.label}
+                </p>
+                <p className={`mt-1 text-sm ${item.valueClassName ?? ""}`}>{item.value}</p>
+              </div>
+            ))}
           </div>
         </CardContent>
       </Card>
 
       <Card className="bg-card/60 border-border/60">
         <CardHeader>
-          <CardTitle>Ego Network Graph</CardTitle>
+          <CardTitle>{model.graphTitle}</CardTitle>
         </CardHeader>
         <CardContent>
-          {egoTransactions.length === 0 ? (
+          {model.graphEmpty ? (
             <div className="flex h-[430px] items-center justify-center text-sm text-muted-foreground">
               Load a wallet with observed transactions to render the 1-2 hop network.
             </div>
@@ -403,20 +199,14 @@ export function ExplorerPage({
             <div className="h-[430px]">
               <NetworkGraph
                 network={network}
-                transactions={egoTransactions}
-                selectedWallet={normalizedWallet}
-                onWalletSelect={(wallet) => {
-                  setSearchValue(wallet);
-                  setWalletAddress(wallet);
-                  onWalletSelect(wallet);
-                }}
+                transactions={model.graphTransactions}
+                edgePoints={model.hasDuneWalletEdges ? model.walletEdgePoints : undefined}
+                selectedWallet={model.normalizedWalletForGraph}
+                onWalletSelect={model.selectWallet}
               />
             </div>
           )}
-          <p className="mt-2 text-xs text-muted-foreground">
-            Constrained to this wallet&apos;s 1-2 hop neighborhood from the last 450 wallet-channel
-            transactions.
-          </p>
+          <p className="mt-2 text-xs text-muted-foreground">{model.graphCaption}</p>
         </CardContent>
       </Card>
 
@@ -426,20 +216,16 @@ export function ExplorerPage({
             <CardTitle>Top Counterparties</CardTitle>
           </CardHeader>
           <CardContent className="space-y-2">
-            {counterpartyStats.length === 0 ? (
+            {model.counterpartyStats.length === 0 ? (
               <p className="text-sm text-muted-foreground">
                 No counterparties for this wallet yet.
               </p>
             ) : (
-              counterpartyStats.slice(0, 12).map((item) => (
+              model.counterpartyStats.slice(0, 12).map((item) => (
                 <button
                   type="button"
                   key={item.wallet}
-                  onClick={() => {
-                    setSearchValue(item.wallet);
-                    setWalletAddress(item.wallet);
-                    onWalletSelect(item.wallet);
-                  }}
+                  onClick={() => model.selectWallet(item.wallet)}
                   className="flex w-full items-center justify-between rounded-md border border-border/60 bg-background/30 p-2 text-left transition-colors hover:bg-background/50"
                 >
                   <div className="min-w-0">
@@ -451,7 +237,7 @@ export function ExplorerPage({
                       {item.tag}
                     </Badge>
                     <span className="text-xs font-semibold">
-                      {formatAmount(item.total, tokenLabel)}
+                      {formatAmount(item.total, model.tokenLabel)}
                     </span>
                   </div>
                 </button>
@@ -465,8 +251,8 @@ export function ExplorerPage({
             <CardTitle>Transaction Table</CardTitle>
             <div className="flex flex-wrap items-center gap-2">
               <Select
-                value={directionFilter}
-                onValueChange={(value: "all" | "in" | "out") => setDirectionFilter(value)}
+                value={model.directionFilter}
+                onValueChange={(value: "all" | "in" | "out") => model.setDirectionFilter(value)}
               >
                 <SelectTrigger className="h-8 w-[110px]">
                   <SelectValue placeholder="Direction" />
@@ -479,9 +265,9 @@ export function ExplorerPage({
               </Select>
 
               <Select
-                value={tagFilter}
+                value={model.tagFilter}
                 onValueChange={(value: "all" | "exchange" | "contract" | "none") =>
-                  setTagFilter(value)
+                  model.setTagFilter(value)
                 }
               >
                 <SelectTrigger className="h-8 w-[130px]">
@@ -496,8 +282,8 @@ export function ExplorerPage({
               </Select>
 
               <Select
-                value={sortBy}
-                onValueChange={(value: "timestamp" | "amount") => setSortBy(value)}
+                value={model.sortBy}
+                onValueChange={(value: "timestamp" | "amount") => model.setSortBy(value)}
               >
                 <SelectTrigger className="h-8 w-[140px]">
                   <SelectValue placeholder="Sort by" />
@@ -513,10 +299,12 @@ export function ExplorerPage({
                 variant="outline"
                 size="sm"
                 className="h-8"
-                onClick={() => setSortDirection((current) => (current === "asc" ? "desc" : "asc"))}
+                onClick={() =>
+                  model.setSortDirection((current) => (current === "asc" ? "desc" : "asc"))
+                }
               >
                 <ArrowDownUp className="h-3.5 w-3.5" />
-                {sortDirection.toUpperCase()}
+                {model.sortDirection.toUpperCase()}
               </Button>
             </div>
           </CardHeader>
@@ -533,14 +321,14 @@ export function ExplorerPage({
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {filteredRows.length === 0 ? (
+                {model.filteredRows.length === 0 ? (
                   <TableRow>
                     <TableCell colSpan={6} className="h-32 text-center text-muted-foreground">
                       No rows match the active wallet and filters.
                     </TableCell>
                   </TableRow>
                 ) : (
-                  filteredRows.map((row) => (
+                  model.filteredRows.map((row) => (
                     <TableRow key={row.tx.id}>
                       <TableCell className="text-xs">
                         {formatDateTime(row.tx.timestampMs)}
@@ -548,11 +336,7 @@ export function ExplorerPage({
                       <TableCell>
                         <button
                           type="button"
-                          onClick={() => {
-                            setSearchValue(row.tx.from);
-                            setWalletAddress(row.tx.from);
-                            onWalletSelect(row.tx.from);
-                          }}
+                          onClick={() => model.selectWallet(row.tx.from)}
                           className="font-mono text-xs hover:text-primary"
                         >
                           {shortWallet(row.tx.from)}
@@ -561,18 +345,14 @@ export function ExplorerPage({
                       <TableCell>
                         <button
                           type="button"
-                          onClick={() => {
-                            setSearchValue(row.tx.to);
-                            setWalletAddress(row.tx.to);
-                            onWalletSelect(row.tx.to);
-                          }}
+                          onClick={() => model.selectWallet(row.tx.to)}
                           className="font-mono text-xs hover:text-primary"
                         >
                           {shortWallet(row.tx.to)}
                         </button>
                       </TableCell>
                       <TableCell className="text-right text-xs font-semibold">
-                        {row.amount.toFixed(row.amount < 1 ? 4 : 2)} {tokenLabel}
+                        {row.amount.toFixed(row.amount < 1 ? 4 : 2)} {model.tokenLabel}
                       </TableCell>
                       <TableCell>
                         <Badge
