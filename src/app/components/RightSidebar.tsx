@@ -50,7 +50,7 @@ export function RightSidebar({
   const recentTransactions = walletTransactions.slice(0, 12);
 
   return (
-    <div className="w-[280px] self-stretch bg-card/60 backdrop-blur-sm border border-border/60 rounded-b-xl p-4 space-y-4">
+    <div className="w-[280px] self-stretch bg-card/60 backdrop-blur-sm border border-border/60 rounded-xl p-4 space-y-4">
       <div className="flex items-center gap-2 pb-2 border-b border-border/50">
         <Wallet className="w-4 h-4 text-primary" />
         <h3 className="font-semibold text-sm">Wallet Details</h3>

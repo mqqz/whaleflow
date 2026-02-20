@@ -1,16 +1,18 @@
 import { TopNavigation } from "./components/TopNavigation";
 import { FeedControlsPanel } from "./components/FeedControlsPanel";
 import { RightSidebar } from "./components/RightSidebar";
-import { NetworkGraph } from "./components/NetworkGraph";
 import { TransactionFeed } from "./components/TransactionFeed";
 import { useMemo, useState } from "react";
 import { useLiveTransactions } from "./hooks/useLiveTransactions";
 import { ImpactPage } from "./components/ImpactView";
 import { TopNavSection } from "./components/TopNavigation";
 import { ExplorerPage } from "./components/ExplorerPage";
+import { MonitorFlowChart } from "./components/MonitorFlowChart";
+import { useMonitorModel } from "./hooks/useMonitorModel";
 
 export default function App() {
   const IMPACT_HISTORY_SIZE = 600;
+  const MONITOR_TOP_HEIGHT = 520;
   const [token, setToken] = useState("eth");
   const network = token === "btc" ? "bitcoin" : "ethereum";
   const [minAmount, setMinAmount] = useState(1);
@@ -33,10 +35,11 @@ export default function App() {
     () => transactions.slice(0, maxVisible),
     [transactions, maxVisible],
   );
-  const graphTransactions = useMemo(
-    () => transactions.filter((tx) => tx.channel === "wallet"),
-    [transactions],
-  );
+  const monitorModel = useMonitorModel({
+    token,
+    liveTransactions: transactions,
+    maxVisible,
+  });
 
   return (
     <div className="min-h-screen bg-background">
@@ -53,21 +56,29 @@ export default function App() {
         <div className="mt-16 pl-3 pr-0 pb-3 min-h-[calc(100dvh-4rem)]">
           <div className="flex gap-3 min-h-[calc(100dvh-4rem)]">
             <div className="flex-1 flex flex-col gap-3 pt-3">
-              <div className="h-[420px]">
-                <NetworkGraph
-                  network={network}
-                  transactions={graphTransactions}
-                  selectedWallet={selectedWallet}
-                  onWalletSelect={setSelectedWallet}
+              <div style={{ height: `${MONITOR_TOP_HEIGHT}px` }}>
+                <MonitorFlowChart
+                  points={monitorModel.flowSeries}
+                  loading={monitorModel.flowLoading}
+                  error={monitorModel.flowError}
+                  asOfLabel={monitorModel.asOfLabel}
+                  insight={monitorModel.insight}
+                  feedMode={monitorModel.feedMode}
+                  top24hAvailable={monitorModel.top24hAvailable}
+                  onFeedModeChange={monitorModel.setFeedMode}
                 />
               </div>
 
-              <div className="min-h-[calc(100dvh-4rem-420px-1.5rem)]">
+              <div style={{ minHeight: `calc(100dvh - 4rem - ${MONITOR_TOP_HEIGHT}px - 1.5rem)` }}>
                 <TransactionFeed
                   network={network}
                   token={token}
                   minAmount={minAmount}
                   transactions={visibleTransactions}
+                  feedMode={monitorModel.feedMode}
+                  feedTitle={monitorModel.feedTitle}
+                  feedSubtitle={monitorModel.feedSubtitle}
+                  edgeRows={monitorModel.edgeRows}
                   status={status}
                   pauseStream={pauseStream}
                   slowMode={slowMode}

@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import { loadExchangeAnalyticsData } from "../services/analyticsData";
 
 export type ConnectionStatus = "connecting" | "live" | "reconnecting" | "error";
 
@@ -84,6 +85,8 @@ const shortAddress = (address: string | undefined): string => {
 
   return `${address.slice(0, 6)}...${address.slice(-4)}`;
 };
+
+const normalizeAddress = (address: string | undefined) => (address ?? "").trim().toLowerCase();
 
 const parseHexBigInt = (value: unknown): bigint | null => {
   if (typeof value !== "string") {
@@ -331,6 +334,7 @@ const mapEvmTx = (
   feeUnit: string,
   blockOverride?: number,
   timestampMsOverride?: number,
+  isExchangeAddress?: (address: string) => boolean,
 ): LiveTransaction | null => {
   if (!rawTx || typeof rawTx !== "object") {
     return null;
@@ -358,14 +362,30 @@ const mapEvmTx = (
 
   const blockNum = parseHexBigInt(tx.blockNumber);
   const block = blockNum ? Number(blockNum) : (blockOverride ?? 0);
+  const fromAddress = tx.from;
+  const toAddress = tx.to ?? undefined;
+  const fromShort = shortAddress(fromAddress);
+  const toShort = shortAddress(toAddress);
+  const fromIsExchange = isExchangeAddress
+    ? isExchangeAddress(fromAddress) || isExchangeAddress(fromShort)
+    : false;
+  const toIsExchange = isExchangeAddress
+    ? isExchangeAddress(toAddress ?? "") || isExchangeAddress(toShort)
+    : false;
+
+  // Keep only exchange-relative transfers for ETH flow semantics.
+  if (toIsExchange === fromIsExchange) {
+    return null;
+  }
+  const flowType: LiveTransaction["type"] = toIsExchange ? "inflow" : "outflow";
 
   return {
     id: tx.hash,
     hash: `${tx.hash.slice(0, 10)}...${tx.hash.slice(-6)}`,
-    from: shortAddress(tx.from),
-    to: shortAddress(tx.to ?? undefined),
+    from: fromShort,
+    to: toShort,
     amount: formatWei(valueWei, 4),
-    type: valueWei > 0n ? "inflow" : "outflow",
+    type: flowType,
     fee: `${formatWei(feeWei, 6)} ${feeUnit}`,
     block,
     timestamp: formatClock(timestampMsOverride ?? Date.now()),
@@ -435,6 +455,7 @@ export function useLiveTransactions({
   const nextRpcIdRef = useRef(10_000);
   const pendingRpcRequestsRef = useRef(new Map<number, "blockByHash">());
   const lastEvmRequestAtRef = useRef(0);
+  const exchangeAddressSetRef = useRef<Set<string>>(new Set());
 
   const controlsRef = useRef({
     minAmount: 0,
@@ -538,6 +559,34 @@ export function useLiveTransactions({
     lastEvmRequestAtRef.current = 0;
     queueRef.current = [];
     setTransactions([]);
+    exchangeAddressSetRef.current = new Set();
+
+    if (network === "ethereum") {
+      void loadExchangeAnalyticsData()
+        .then((analytics) => {
+          if (disposed) {
+            return;
+          }
+          const known = new Set<string>();
+          for (const edge of analytics.edges24h) {
+            if (edge.srcLabel !== "unlabeled") {
+              known.add(normalizeAddress(edge.src));
+              known.add(normalizeAddress(shortAddress(edge.src)));
+            }
+            if (edge.dstLabel !== "unlabeled") {
+              known.add(normalizeAddress(edge.dst));
+              known.add(normalizeAddress(shortAddress(edge.dst)));
+            }
+          }
+          exchangeAddressSetRef.current = known;
+        })
+        .catch(() => {
+          // If analytics labels are unavailable we fall back to value-based side mapping.
+        });
+    }
+
+    const isKnownExchangeAddress = (address: string) =>
+      exchangeAddressSetRef.current.has(normalizeAddress(address));
 
     const enqueueIfPassesFilters = (mapped: LiveTransaction[]) => {
       const controls = controlsRef.current;
@@ -637,7 +686,14 @@ export function useLiveTransactions({
               return;
             }
 
-            enqueueIfPassesFilters(stream.mapper(result));
+            const mapped = mapEvmTx(
+              result,
+              stream.feeUnit ?? "ETH",
+              undefined,
+              undefined,
+              isKnownExchangeAddress,
+            );
+            enqueueIfPassesFilters(mapped ? [mapped] : []);
             return;
           }
 
@@ -665,7 +721,15 @@ export function useLiveTransactions({
               const txs = Array.isArray(block.transactions) ? block.transactions : [];
 
               const mapped = txs
-                .map((tx) => mapEvmTx(tx, stream.feeUnit ?? "ETH", blockNumber, blockTimestampMs))
+                .map((tx) =>
+                  mapEvmTx(
+                    tx,
+                    stream.feeUnit ?? "ETH",
+                    blockNumber,
+                    blockTimestampMs,
+                    isKnownExchangeAddress,
+                  ),
+                )
                 .filter((tx): tx is LiveTransaction => tx !== null);
 
               enqueueIfPassesFilters(mapped);
