@@ -1,9 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import * as d3 from "d3";
-import { ZoomIn, ZoomOut, Maximize2 } from "lucide-react";
-import { Button } from "./ui/button";
 import { LiveTransaction } from "../hooks/useLiveTransactions";
-import { detectAddressTag } from "../data/addressLabels";
+import { EdgePoint } from "../services/analyticsData";
 
 interface GraphNode {
   id: string;
@@ -25,6 +23,7 @@ interface GraphLink {
 interface NetworkGraphProps {
   network: string;
   transactions: LiveTransaction[];
+  edgePoints?: EdgePoint[];
   selectedWallet: string | null;
   onWalletSelect: (wallet: string) => void;
 }
@@ -45,17 +44,13 @@ const isRoleLabel = (value: string) =>
   value.includes("Seller");
 
 const classifyNodeType = (id: string, amount: number): GraphNode["type"] => {
-  const label = detectAddressTag(id);
-  if (isRoleLabel(id) || label === "exchange") {
+  const lower = id.toLowerCase();
+
+  if (isRoleLabel(id) || lower.includes("exchange")) {
     return "exchange";
   }
 
-  if (
-    id.toLowerCase() === "unknown" ||
-    label === "router" ||
-    label === "bridge" ||
-    label === "contract"
-  ) {
+  if (lower === "unknown" || lower.includes("contract")) {
     return "contract";
   }
 
@@ -155,6 +150,93 @@ const buildGraphData = (transactions: LiveTransaction[]) => {
   };
 };
 
+const buildGraphDataFromEdges = (edges: EdgePoint[]) => {
+  const nodes = new Map<string, GraphNode>();
+  const links = new Map<
+    string,
+    { source: string; target: string; value: number; netVolume: number }
+  >();
+
+  for (const edge of edges) {
+    const amount = Number(edge.valueEth);
+    if (!Number.isFinite(amount) || amount <= 0) {
+      continue;
+    }
+
+    const sourceId = edge.src || "unknown";
+    const targetId = edge.dst || "unknown";
+    const sourceLabel = (edge.srcLabel ?? "").toLowerCase();
+    const targetLabel = (edge.dstLabel ?? "").toLowerCase();
+
+    const sourceType: GraphNode["type"] =
+      sourceLabel && sourceLabel !== "unlabeled" ? "exchange" : classifyNodeType(sourceId, amount);
+    const targetType: GraphNode["type"] =
+      targetLabel && targetLabel !== "unlabeled" ? "exchange" : classifyNodeType(targetId, amount);
+
+    if (!nodes.has(sourceId)) {
+      nodes.set(sourceId, {
+        id: sourceId,
+        type: sourceType,
+        value: amount,
+      });
+    } else {
+      const source = nodes.get(sourceId)!;
+      source.value += amount;
+      source.type = mergeNodeType(source.type, sourceType);
+    }
+
+    if (!nodes.has(targetId)) {
+      nodes.set(targetId, {
+        id: targetId,
+        type: targetType,
+        value: amount,
+      });
+    } else {
+      const target = nodes.get(targetId)!;
+      target.value += amount;
+      target.type = mergeNodeType(target.type, targetType);
+    }
+
+    const key = `${sourceId}=>${targetId}`;
+    const srcIsExchange = sourceType === "exchange";
+    const dstIsExchange = targetType === "exchange";
+    const signedVolume =
+      dstIsExchange && !srcIsExchange ? amount : srcIsExchange && !dstIsExchange ? -amount : 0;
+
+    if (!links.has(key)) {
+      links.set(key, {
+        source: sourceId,
+        target: targetId,
+        value: amount,
+        netVolume: signedVolume,
+      });
+    } else {
+      const link = links.get(key)!;
+      link.value += amount;
+      link.netVolume += signedVolume;
+    }
+  }
+
+  const sortedNodes = [...nodes.values()].sort((a, b) => b.value - a.value).slice(0, MAX_NODES);
+  const allowedNodeIds = new Set(sortedNodes.map((node) => node.id));
+
+  const sortedLinks: GraphLink[] = [...links.values()]
+    .filter((link) => allowedNodeIds.has(link.source) && allowedNodeIds.has(link.target))
+    .sort((a, b) => b.value - a.value)
+    .slice(0, MAX_LINKS)
+    .map((link) => ({
+      source: link.source,
+      target: link.target,
+      value: link.value,
+      type: link.netVolume >= 0 ? "inflow" : "outflow",
+    }));
+
+  return {
+    nodes: sortedNodes,
+    links: sortedLinks,
+  };
+};
+
 const getNodeColor = (type: GraphNode["type"]) => {
   switch (type) {
     case "whale":
@@ -177,6 +259,7 @@ const linkKey = (d: GraphLink) => {
 export function NetworkGraph({
   network,
   transactions,
+  edgePoints,
   selectedWallet,
   onWalletSelect,
 }: NetworkGraphProps) {
@@ -213,7 +296,11 @@ export function NetworkGraph({
   const prevLinkSignatureRef = useRef("");
   const relaxTimerRef = useRef<number | null>(null);
 
-  const graphData = useMemo(() => buildGraphData(transactions), [transactions]);
+  const isEdgeMode = Boolean(edgePoints && edgePoints.length > 0);
+  const graphData = useMemo(
+    () => (isEdgeMode ? buildGraphDataFromEdges(edgePoints ?? []) : buildGraphData(transactions)),
+    [edgePoints, isEdgeMode, transactions],
+  );
 
   useEffect(() => {
     if (!svgRef.current) {
@@ -611,46 +698,8 @@ export function NetworkGraph({
     }
   }, [graphData, onWalletSelect, selectedWallet]);
 
-  const hasData = transactions.length > 0;
-
   return (
     <div className="relative h-full w-full bg-card/30 backdrop-blur-sm rounded-xl border border-border/50 overflow-hidden group">
-      <div className="absolute top-0 left-0 right-0 p-3 bg-gradient-to-b from-card/80 to-transparent backdrop-blur-sm z-10 border-b border-border/30">
-        <div className="flex items-center justify-between">
-          <div>
-            <h3 className="font-semibold text-sm">Network Graph</h3>
-            <p className="text-xs text-muted-foreground">
-              {hasData
-                ? `${network.toUpperCase()} live transaction flow`
-                : "Waiting for enough live transactions to build graph"}
-            </p>
-          </div>
-          <div className="flex gap-2">
-            <Button
-              size="icon"
-              variant="ghost"
-              className="w-7 h-7 bg-secondary/50 hover:bg-secondary"
-            >
-              <ZoomIn className="w-3.5 h-3.5" />
-            </Button>
-            <Button
-              size="icon"
-              variant="ghost"
-              className="w-7 h-7 bg-secondary/50 hover:bg-secondary"
-            >
-              <ZoomOut className="w-3.5 h-3.5" />
-            </Button>
-            <Button
-              size="icon"
-              variant="ghost"
-              className="w-7 h-7 bg-secondary/50 hover:bg-secondary"
-            >
-              <Maximize2 className="w-3.5 h-3.5" />
-            </Button>
-          </div>
-        </div>
-      </div>
-
       <div className="absolute bottom-4 left-4 p-2.5 bg-card/90 backdrop-blur-sm rounded-lg border border-border/50 z-10">
         <div className="space-y-1.5 text-xs">
           <div className="flex items-center gap-2">
