@@ -9,6 +9,7 @@ interface FetchPriceCandlesOptions {
   token: string;
   rangeMs: number;
   interval: CandleInterval;
+  endMs?: number;
 }
 
 interface PriceFeedResult {
@@ -142,8 +143,9 @@ export async function fetchPriceCandlesWithFallback({
   token,
   rangeMs,
   interval,
+  endMs,
 }: FetchPriceCandlesOptions): Promise<PriceFeedResult> {
-  const now = Date.now();
+  const now = typeof endMs === "number" && Number.isFinite(endMs) ? endMs : Date.now();
   const start = now - rangeMs;
   const tokenKey = token.toLowerCase();
 

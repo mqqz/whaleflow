@@ -164,6 +164,8 @@ export function useImpactModel({
   const [priceSource, setPriceSource] = useState("Unavailable");
   const [priceLoading, setPriceLoading] = useState(false);
   const [priceError, setPriceError] = useState<string | null>(null);
+  const anchorNowMs = Math.min(data?.asOf ?? Date.now(), Date.now());
+  const startTs = anchorNowMs - RANGE_MS[range];
 
   useEffect(() => {
     let active = true;
@@ -173,6 +175,7 @@ export function useImpactModel({
       token,
       rangeMs: RANGE_MS[range],
       interval: PRICE_INTERVAL[range],
+      endMs: anchorNowMs,
     })
       .then((result) => {
         if (!active) {
@@ -198,10 +201,7 @@ export function useImpactModel({
     return () => {
       active = false;
     };
-  }, [range, token]);
-
-  const nowMs = Date.now();
-  const startTs = nowMs - RANGE_MS[range];
+  }, [anchorNowMs, range, token]);
 
   const flowWindow = useMemo(() => {
     return (data?.flowSeries ?? []).filter((point) => point.ts >= startTs);
@@ -276,6 +276,7 @@ export function useImpactModel({
     const prevPoint = flowWindow.length > 1 ? flowWindow[flowWindow.length - 2] : null;
 
     const txInWindow = transactions.filter((tx) => tx.channel === "wallet");
+    const nowMs = Date.now();
     const lastHourStart = nowMs - HOUR_MS;
     const prevHourStart = nowMs - 2 * HOUR_MS;
 
@@ -360,7 +361,7 @@ export function useImpactModel({
         pct: toPctChange(z, zPrev),
       },
     };
-  }, [flowPriceSeries, flowWindow, nowMs, transactions]);
+  }, [flowPriceSeries, flowWindow, transactions]);
 
   const insight = useMemo(() => {
     const corr = kpis.flowReturnCorr24h.value;

@@ -883,7 +883,7 @@ export function useLiveTransactions({
 
       wsRef.current = null;
     };
-  }, [stream]);
+  }, [network, stream]);
 
   return { transactions, status };
 }

@@ -263,7 +263,7 @@ const linkKey = (d: GraphLink) => {
 };
 
 export function NetworkGraph({
-  network,
+  network: _network,
   transactions,
   edgePoints,
   selectedWallet,
