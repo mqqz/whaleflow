@@ -8,6 +8,8 @@ export interface LiveTransaction {
   hash: string;
   from: string;
   to: string;
+  fromLabel?: string;
+  toLabel?: string;
   amount: string;
   type: "inflow" | "outflow";
   fee: string;
@@ -334,7 +336,7 @@ const mapEvmTx = (
   feeUnit: string,
   blockOverride?: number,
   timestampMsOverride?: number,
-  isExchangeAddress?: (address: string) => boolean,
+  resolveExchangeLabel?: (address: string) => string | null,
 ): LiveTransaction | null => {
   if (!rawTx || typeof rawTx !== "object") {
     return null;
@@ -366,12 +368,12 @@ const mapEvmTx = (
   const toAddress = tx.to ?? undefined;
   const fromShort = shortAddress(fromAddress);
   const toShort = shortAddress(toAddress);
-  const fromIsExchange = isExchangeAddress
-    ? isExchangeAddress(fromAddress) || isExchangeAddress(fromShort)
-    : false;
-  const toIsExchange = isExchangeAddress
-    ? isExchangeAddress(toAddress ?? "") || isExchangeAddress(toShort)
-    : false;
+  const fromLabel =
+    resolveExchangeLabel?.(fromAddress) ?? resolveExchangeLabel?.(fromShort) ?? null;
+  const toLabel =
+    resolveExchangeLabel?.(toAddress ?? "") ?? resolveExchangeLabel?.(toShort) ?? null;
+  const fromIsExchange = fromLabel !== null;
+  const toIsExchange = toLabel !== null;
 
   // Keep only exchange-relative transfers for ETH flow semantics.
   if (toIsExchange === fromIsExchange) {
@@ -384,6 +386,8 @@ const mapEvmTx = (
     hash: `${tx.hash.slice(0, 10)}...${tx.hash.slice(-6)}`,
     from: fromShort,
     to: toShort,
+    fromLabel: fromLabel ?? undefined,
+    toLabel: toLabel ?? undefined,
     amount: formatWei(valueWei, 4),
     type: flowType,
     fee: `${formatWei(feeWei, 6)} ${feeUnit}`,
@@ -455,7 +459,7 @@ export function useLiveTransactions({
   const nextRpcIdRef = useRef(10_000);
   const pendingRpcRequestsRef = useRef(new Map<number, "blockByHash">());
   const lastEvmRequestAtRef = useRef(0);
-  const exchangeAddressSetRef = useRef<Set<string>>(new Set());
+  const exchangeLabelByAddressRef = useRef<Map<string, string>>(new Map());
 
   const controlsRef = useRef({
     minAmount: 0,
@@ -559,7 +563,7 @@ export function useLiveTransactions({
     lastEvmRequestAtRef.current = 0;
     queueRef.current = [];
     setTransactions([]);
-    exchangeAddressSetRef.current = new Set();
+    exchangeLabelByAddressRef.current = new Map();
 
     if (network === "ethereum") {
       void loadExchangeAnalyticsData()
@@ -567,26 +571,36 @@ export function useLiveTransactions({
           if (disposed) {
             return;
           }
-          const known = new Set<string>();
+          const labelByAddress = new Map<string, string>();
+          const putLabeledAddress = (address: string, label: string) => {
+            const normalizedAddress = normalizeAddress(address);
+            if (!normalizedAddress) {
+              return;
+            }
+            if (!labelByAddress.has(normalizedAddress)) {
+              labelByAddress.set(normalizedAddress, label);
+            }
+          };
+
           for (const edge of analytics.edges24h) {
             if (edge.srcLabel !== "unlabeled") {
-              known.add(normalizeAddress(edge.src));
-              known.add(normalizeAddress(shortAddress(edge.src)));
+              putLabeledAddress(edge.src, edge.srcLabel);
+              putLabeledAddress(shortAddress(edge.src), edge.srcLabel);
             }
             if (edge.dstLabel !== "unlabeled") {
-              known.add(normalizeAddress(edge.dst));
-              known.add(normalizeAddress(shortAddress(edge.dst)));
+              putLabeledAddress(edge.dst, edge.dstLabel);
+              putLabeledAddress(shortAddress(edge.dst), edge.dstLabel);
             }
           }
-          exchangeAddressSetRef.current = known;
+          exchangeLabelByAddressRef.current = labelByAddress;
         })
         .catch(() => {
           // If analytics labels are unavailable we fall back to value-based side mapping.
         });
     }
 
-    const isKnownExchangeAddress = (address: string) =>
-      exchangeAddressSetRef.current.has(normalizeAddress(address));
+    const resolveExchangeLabel = (address: string) =>
+      exchangeLabelByAddressRef.current.get(normalizeAddress(address)) ?? null;
 
     const enqueueIfPassesFilters = (mapped: LiveTransaction[]) => {
       const controls = controlsRef.current;
@@ -691,7 +705,7 @@ export function useLiveTransactions({
               stream.feeUnit ?? "ETH",
               undefined,
               undefined,
-              isKnownExchangeAddress,
+              resolveExchangeLabel,
             );
             enqueueIfPassesFilters(mapped ? [mapped] : []);
             return;
@@ -727,7 +741,7 @@ export function useLiveTransactions({
                     stream.feeUnit ?? "ETH",
                     blockNumber,
                     blockTimestampMs,
-                    isKnownExchangeAddress,
+                    resolveExchangeLabel,
                   ),
                 )
                 .filter((tx): tx is LiveTransaction => tx !== null);

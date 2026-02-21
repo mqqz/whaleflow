@@ -297,13 +297,22 @@ export function TransactionFeed({
                             type="button"
                             onClick={() => onWalletSelect(tx.from)}
                             className={`text-xs font-mono rounded px-1 -mx-1 transition-colors ${
-                              selectedWallet === tx.from
-                                ? "text-primary bg-primary/15"
-                                : "hover:text-primary hover:bg-primary/10"
+                              tx.fromLabel
+                                ? selectedWallet === tx.from
+                                  ? "text-amber-300 bg-amber-500/15"
+                                  : "text-amber-400 hover:text-amber-300 hover:bg-amber-500/10"
+                                : selectedWallet === tx.from
+                                  ? "text-primary bg-primary/15"
+                                  : "hover:text-primary hover:bg-primary/10"
                             }`}
                           >
                             {tx.from}
                           </button>
+                          {tx.fromLabel ? (
+                            <span className="ml-1 inline-flex items-center rounded border border-amber-500/30 bg-amber-500/12 px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide text-amber-300">
+                              {tx.fromLabel}
+                            </span>
+                          ) : null}
                         </div>
                         <ArrowRight className="w-3.5 h-3.5 text-muted-foreground flex-shrink-0" />
                         <div className="flex-1">
@@ -312,13 +321,22 @@ export function TransactionFeed({
                             type="button"
                             onClick={() => onWalletSelect(tx.to)}
                             className={`text-xs font-mono rounded px-1 -mx-1 transition-colors ${
-                              selectedWallet === tx.to
-                                ? "text-primary bg-primary/15"
-                                : "hover:text-primary hover:bg-primary/10"
+                              tx.toLabel
+                                ? selectedWallet === tx.to
+                                  ? "text-amber-300 bg-amber-500/15"
+                                  : "text-amber-400 hover:text-amber-300 hover:bg-amber-500/10"
+                                : selectedWallet === tx.to
+                                  ? "text-primary bg-primary/15"
+                                  : "hover:text-primary hover:bg-primary/10"
                             }`}
                           >
                             {tx.to}
                           </button>
+                          {tx.toLabel ? (
+                            <span className="ml-1 inline-flex items-center rounded border border-amber-500/30 bg-amber-500/12 px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide text-amber-300">
+                              {tx.toLabel}
+                            </span>
+                          ) : null}
                         </div>
                       </div>
 
