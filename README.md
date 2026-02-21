@@ -1,29 +1,19 @@
 # WhaleFlow
 
-Live crypto on-chain flow intelligence.
+Live crypto on-chain flow intelligence
 
-## Repository Layout
+## Project Overview
 
-- Frontend app is at repository root.
-- There is no `backend/` directory.
-- Main source code lives in `src/`.
+## Data Source
 
-## Local Development
+## Methodology
 
-```bash
-pnpm install
-pnpm dev
-```
+## Dashboard Screenshots
 
-## Build
+## Design Screenshots
 
-```bash
-pnpm build
-```
+## Key Insights
 
-Output is generated in `dist/`.
+## Live Dashboard Link
 
-## Deployment
-
-- GitHub Pages deploy is handled by `.github/workflows/deploy-pages.yml`.
-- The workflow builds from repo root and uploads `dist/`.
+## Limitations
