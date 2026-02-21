@@ -78,6 +78,10 @@ export default function App() {
             onSlowModeChange={setSlowMode}
             onControlsOpenChange={setControlsOpen}
             onWalletSelect={setSelectedWallet}
+            onOpenWalletInExplorer={(wallet) => {
+              setSelectedWallet(wallet);
+              setActiveSection("explorer");
+            }}
           />
         )}
 

@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { FeedControlsPanel } from "../components/FeedControlsPanel";
 import { RightSidebar } from "../components/RightSidebar";
 import { MonitorFlowChart } from "../components/MonitorFlowChart";
@@ -27,6 +27,7 @@ interface MonitorSectionProps {
   onSlowModeChange: (value: boolean) => void;
   onControlsOpenChange: (value: boolean) => void;
   onWalletSelect: (wallet: string | null) => void;
+  onOpenWalletInExplorer: (wallet: string) => void;
 }
 
 const MONITOR_TOP_HEIGHT = 520;
@@ -51,13 +52,21 @@ export function MonitorSection({
   onSlowModeChange,
   onControlsOpenChange,
   onWalletSelect,
+  onOpenWalletInExplorer,
 }: MonitorSectionProps) {
   const [mainChartMode, setMainChartMode] = useState<"line" | "network">("line");
+  const [sidebarExpanded, setSidebarExpanded] = useState(false);
   const monitorModel = useMonitorModel({
     token,
     liveTransactions: transactions,
     maxVisible,
   });
+
+  useEffect(() => {
+    if (selectedWallet && selectedWallet.trim().length > 0) {
+      setSidebarExpanded(true);
+    }
+  }, [selectedWallet]);
 
   return (
     <div className="mt-16 pl-3 pr-0 pb-3 min-h-[calc(100dvh-4rem)]">
@@ -189,6 +198,9 @@ export function MonitorSection({
           selectedWallet={selectedWallet}
           transactions={visibleTransactions}
           onWalletSelect={onWalletSelect}
+          onOpenWalletInExplorer={onOpenWalletInExplorer}
+          expanded={sidebarExpanded}
+          onExpandedChange={setSidebarExpanded}
         />
       </div>
     </div>

@@ -8,6 +8,8 @@ export interface LiveTransaction {
   hash: string;
   from: string;
   to: string;
+  fromFull?: string;
+  toFull?: string;
   fromLabel?: string;
   toLabel?: string;
   amount: string;
@@ -386,6 +388,8 @@ const mapEvmTx = (
     hash: `${tx.hash.slice(0, 10)}...${tx.hash.slice(-6)}`,
     from: fromShort,
     to: toShort,
+    fromFull: fromAddress,
+    toFull: toAddress,
     fromLabel: fromLabel ?? undefined,
     toLabel: toLabel ?? undefined,
     amount: formatWei(valueWei, 4),

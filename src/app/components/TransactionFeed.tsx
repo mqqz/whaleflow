@@ -3,12 +3,14 @@ import {
   ChevronDown,
   ChevronUp,
   Fuel,
+  Icon,
   Layers,
   Pause,
   Play,
   SlidersHorizontal,
   TimerReset,
 } from "lucide-react";
+import { whale } from "@lucide/lab";
 import { motion, AnimatePresence } from "motion/react";
 import { ReactNode } from "react";
 import { ConnectionStatus, LiveTransaction } from "../hooks/useLiveTransactions";
@@ -68,6 +70,21 @@ const tokenLabels: Record<string, string> = {
   btc: "BTC",
   eth: "ETH",
 };
+
+const shortAddress = (address: string) => {
+  if (address.length <= 12) {
+    return address;
+  }
+  return `${address.slice(0, 6)}...${address.slice(-4)}`;
+};
+
+const shortEventId = (id: string) => {
+  if (id.length <= 20) {
+    return id;
+  }
+  return `${id.slice(0, 10)}...${id.slice(-6)}`;
+};
+const WHALE_THRESHOLD = 100;
 
 export function TransactionFeed({
   network,
@@ -206,48 +223,116 @@ export function TransactionFeed({
                       transition={{ duration: 0.18 }}
                       className="mb-2"
                     >
-                      <div className="flex items-start gap-4 p-3 bg-secondary/20 hover:bg-secondary/35 rounded-lg border border-border/20 transition-all">
-                        <div className="w-[120px]">
-                          <p className="text-xs text-muted-foreground mb-0.5">Time</p>
-                          <p className="text-xs font-mono">{row.timeLabel}</p>
-                        </div>
+                      {/** Top-24h rows use aggregated ETH value as the whale heuristic. */}
+                      {(() => {
+                        const isWhale = row.valueEth >= WHALE_THRESHOLD;
+                        return (
+                          <div className="flex items-start gap-4 p-3 bg-secondary/20 hover:bg-secondary/35 rounded-lg border border-border/20 transition-all">
+                            <div className="w-[140px]">
+                              <p className="text-xs text-muted-foreground mb-0.5">Event</p>
+                              <p className="text-xs font-mono font-semibold group-hover:text-primary transition-colors">
+                                {shortEventId(row.id)}
+                              </p>
+                            </div>
 
-                        <div className="flex-1">
-                          <p className="text-xs text-muted-foreground mb-0.5">Route</p>
-                          <div className="flex items-center gap-2 text-xs">
-                            <button
-                              type="button"
-                              onClick={() => onWalletSelect(row.src)}
-                              className="font-semibold text-amber-400 hover:text-amber-300"
-                            >
-                              {row.srcLabel}
-                            </button>
-                            <ArrowRight className="w-3.5 h-3.5 text-muted-foreground flex-shrink-0" />
-                            <button
-                              type="button"
-                              onClick={() => onWalletSelect(row.dst)}
-                              className="font-semibold text-amber-400 hover:text-amber-300"
-                            >
-                              {row.dstLabel}
-                            </button>
+                            <div className="flex-1 flex items-center gap-2">
+                              <div className="flex-1">
+                                <p className="text-xs text-muted-foreground mb-0.5">From</p>
+                                <button
+                                  type="button"
+                                  onClick={() => onWalletSelect(row.src)}
+                                  className={`text-xs font-mono rounded px-1 -mx-1 transition-colors ${
+                                    row.srcLabel !== "unlabeled"
+                                      ? selectedWallet === row.src
+                                        ? "text-amber-300 bg-amber-500/15"
+                                        : "text-amber-400 hover:text-amber-300 hover:bg-amber-500/10"
+                                      : selectedWallet === row.src
+                                        ? "text-primary bg-primary/15"
+                                        : "hover:text-primary hover:bg-primary/10"
+                                  }`}
+                                >
+                                  {shortAddress(row.src)}
+                                </button>
+                                {row.srcLabel !== "unlabeled" ? (
+                                  <span className="ml-1 inline-flex items-center rounded border border-amber-500/30 bg-amber-500/12 px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide text-amber-300">
+                                    {row.srcLabel}
+                                  </span>
+                                ) : null}
+                                {isWhale && row.srcLabel === "unlabeled" ? (
+                                  <span
+                                    className="ml-1 inline-flex items-center rounded border border-rose-500/30 bg-rose-500/12 px-1 py-0.5 text-[10px] font-medium text-rose-300"
+                                    title="Whale-sized transfer"
+                                  >
+                                    <Icon iconNode={whale} className="h-3 w-3" />
+                                  </span>
+                                ) : null}
+                              </div>
+                              <ArrowRight className="w-3.5 h-3.5 text-muted-foreground flex-shrink-0" />
+                              <div className="flex-1">
+                                <p className="text-xs text-muted-foreground mb-0.5">To</p>
+                                <button
+                                  type="button"
+                                  onClick={() => onWalletSelect(row.dst)}
+                                  className={`text-xs font-mono rounded px-1 -mx-1 transition-colors ${
+                                    row.dstLabel !== "unlabeled"
+                                      ? selectedWallet === row.dst
+                                        ? "text-amber-300 bg-amber-500/15"
+                                        : "text-amber-400 hover:text-amber-300 hover:bg-amber-500/10"
+                                      : selectedWallet === row.dst
+                                        ? "text-primary bg-primary/15"
+                                        : "hover:text-primary hover:bg-primary/10"
+                                  }`}
+                                >
+                                  {shortAddress(row.dst)}
+                                </button>
+                                {row.dstLabel !== "unlabeled" ? (
+                                  <span className="ml-1 inline-flex items-center rounded border border-amber-500/30 bg-amber-500/12 px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide text-amber-300">
+                                    {row.dstLabel}
+                                  </span>
+                                ) : null}
+                                {isWhale && row.dstLabel === "unlabeled" ? (
+                                  <span
+                                    className="ml-1 inline-flex items-center rounded border border-rose-500/30 bg-rose-500/12 px-1 py-0.5 text-[10px] font-medium text-rose-300"
+                                    title="Whale-sized transfer"
+                                  >
+                                    <Icon iconNode={whale} className="h-3 w-3" />
+                                  </span>
+                                ) : null}
+                              </div>
+                            </div>
+
+                            <div className="w-[120px] text-right">
+                              <p className="text-xs text-muted-foreground mb-0.5">Amount</p>
+                              <p
+                                className={`text-sm font-bold ${
+                                  row.dstLabel !== "unlabeled" && row.srcLabel === "unlabeled"
+                                    ? "text-success"
+                                    : row.srcLabel !== "unlabeled" && row.dstLabel === "unlabeled"
+                                      ? "text-destructive"
+                                      : "text-primary"
+                                }`}
+                              >
+                                {row.dstLabel !== "unlabeled" && row.srcLabel === "unlabeled"
+                                  ? "+"
+                                  : row.srcLabel !== "unlabeled" && row.dstLabel === "unlabeled"
+                                    ? "-"
+                                    : ""}
+                                {row.valueEth.toFixed(row.valueEth < 1 ? 4 : 2)} {tokenLabel}
+                              </p>
+                            </div>
+
+                            <div className="w-[90px] text-right">
+                              <p className="text-xs text-muted-foreground mb-0.5">Tx Count</p>
+                              <p className="text-sm font-semibold">{row.txCount}</p>
+                            </div>
+
+                            <div className="w-[90px] text-right">
+                              <p className="text-xs text-muted-foreground mb-0.5">Time</p>
+                              <p className="text-xs font-mono">{row.timeLabel}</p>
+                            </div>
                           </div>
-                          <div className="mt-1 text-[11px] text-muted-foreground font-mono">
-                            {row.src} {"->"} {row.dst}
-                          </div>
-                        </div>
-
-                        <div className="w-[140px] text-right">
-                          <p className="text-xs text-muted-foreground mb-0.5">ETH Value</p>
-                          <p className="text-sm font-bold text-primary">
-                            {row.valueEth.toFixed(2)} ETH
-                          </p>
-                        </div>
-
-                        <div className="w-[90px] text-right">
-                          <p className="text-xs text-muted-foreground mb-0.5">Tx Count</p>
-                          <p className="text-sm font-semibold">{row.txCount}</p>
-                        </div>
-                      </div>
+                        );
+                      })()}
                     </motion.div>
                   ))}
                 </AnimatePresence>
@@ -282,96 +367,119 @@ export function TransactionFeed({
                     transition={{ duration: 0.25 }}
                     className="mb-2"
                   >
-                    <div className="flex items-start gap-4 p-3 bg-secondary/20 hover:bg-secondary/40 rounded-lg border border-border/20 transition-all group cursor-pointer">
-                      <div className="w-[140px]">
-                        <p className="text-xs text-muted-foreground mb-0.5">Event</p>
-                        <p className="text-xs font-mono font-semibold group-hover:text-primary transition-colors">
-                          {tx.hash}
-                        </p>
-                      </div>
+                    {/** Live rows use per-transaction amount as the whale heuristic. */}
+                    {(() => {
+                      const txAmount = Number.parseFloat(tx.amount);
+                      const isWhale = Number.isFinite(txAmount) && txAmount >= WHALE_THRESHOLD;
+                      return (
+                        <div className="flex items-start gap-4 p-3 bg-secondary/20 hover:bg-secondary/40 rounded-lg border border-border/20 transition-all group cursor-pointer">
+                          <div className="w-[140px]">
+                            <p className="text-xs text-muted-foreground mb-0.5">Event</p>
+                            <p className="text-xs font-mono font-semibold group-hover:text-primary transition-colors">
+                              {tx.hash}
+                            </p>
+                          </div>
 
-                      <div className="flex-1 flex items-center gap-2">
-                        <div className="flex-1">
-                          <p className="text-xs text-muted-foreground mb-0.5">From</p>
-                          <button
-                            type="button"
-                            onClick={() => onWalletSelect(tx.from)}
-                            className={`text-xs font-mono rounded px-1 -mx-1 transition-colors ${
-                              tx.fromLabel
-                                ? selectedWallet === tx.from
-                                  ? "text-amber-300 bg-amber-500/15"
-                                  : "text-amber-400 hover:text-amber-300 hover:bg-amber-500/10"
-                                : selectedWallet === tx.from
-                                  ? "text-primary bg-primary/15"
-                                  : "hover:text-primary hover:bg-primary/10"
-                            }`}
-                          >
-                            {tx.from}
-                          </button>
-                          {tx.fromLabel ? (
-                            <span className="ml-1 inline-flex items-center rounded border border-amber-500/30 bg-amber-500/12 px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide text-amber-300">
-                              {tx.fromLabel}
-                            </span>
-                          ) : null}
+                          <div className="flex-1 flex items-center gap-2">
+                            <div className="flex-1">
+                              <p className="text-xs text-muted-foreground mb-0.5">From</p>
+                              <button
+                                type="button"
+                                onClick={() => onWalletSelect(tx.from)}
+                                className={`text-xs font-mono rounded px-1 -mx-1 transition-colors ${
+                                  tx.fromLabel
+                                    ? selectedWallet === tx.from
+                                      ? "text-amber-300 bg-amber-500/15"
+                                      : "text-amber-400 hover:text-amber-300 hover:bg-amber-500/10"
+                                    : selectedWallet === tx.from
+                                      ? "text-primary bg-primary/15"
+                                      : "hover:text-primary hover:bg-primary/10"
+                                }`}
+                              >
+                                {tx.from}
+                              </button>
+                              {tx.fromLabel ? (
+                                <span className="ml-1 inline-flex items-center rounded border border-amber-500/30 bg-amber-500/12 px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide text-amber-300">
+                                  {tx.fromLabel}
+                                </span>
+                              ) : null}
+                              {isWhale && !tx.fromLabel ? (
+                                <span
+                                  className="ml-1 inline-flex items-center rounded border border-rose-500/30 bg-rose-500/12 px-1 py-0.5 text-[10px] font-medium text-rose-300"
+                                  title="Whale-sized transfer"
+                                >
+                                  <Icon iconNode={whale} className="h-3 w-3" />
+                                </span>
+                              ) : null}
+                            </div>
+                            <ArrowRight className="w-3.5 h-3.5 text-muted-foreground flex-shrink-0" />
+                            <div className="flex-1">
+                              <p className="text-xs text-muted-foreground mb-0.5">To</p>
+                              <button
+                                type="button"
+                                onClick={() => onWalletSelect(tx.to)}
+                                className={`text-xs font-mono rounded px-1 -mx-1 transition-colors ${
+                                  tx.toLabel
+                                    ? selectedWallet === tx.to
+                                      ? "text-amber-300 bg-amber-500/15"
+                                      : "text-amber-400 hover:text-amber-300 hover:bg-amber-500/10"
+                                    : selectedWallet === tx.to
+                                      ? "text-primary bg-primary/15"
+                                      : "hover:text-primary hover:bg-primary/10"
+                                }`}
+                              >
+                                {tx.to}
+                              </button>
+                              {tx.toLabel ? (
+                                <span className="ml-1 inline-flex items-center rounded border border-amber-500/30 bg-amber-500/12 px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide text-amber-300">
+                                  {tx.toLabel}
+                                </span>
+                              ) : null}
+                              {isWhale && !tx.toLabel ? (
+                                <span
+                                  className="ml-1 inline-flex items-center rounded border border-rose-500/30 bg-rose-500/12 px-1 py-0.5 text-[10px] font-medium text-rose-300"
+                                  title="Whale-sized transfer"
+                                >
+                                  <Icon iconNode={whale} className="h-3 w-3" />
+                                </span>
+                              ) : null}
+                            </div>
+                          </div>
+
+                          <div className="w-[120px] text-right">
+                            <p className="text-xs text-muted-foreground mb-0.5">Amount</p>
+                            <p
+                              className={`text-sm font-bold ${
+                                tx.type === "inflow" ? "text-success" : "text-destructive"
+                              }`}
+                            >
+                              {tx.type === "inflow" ? "+" : "-"}
+                              {tx.amount} {tokenLabel}
+                            </p>
+                          </div>
+
+                          <div className="w-[120px]">
+                            <p className="text-xs text-muted-foreground mb-0.5">Gas Fee</p>
+                            <div className="flex items-center gap-1">
+                              <Fuel className="w-3 h-3 text-muted-foreground" />
+                              <p className="text-xs font-mono">{tx.fee}</p>
+                            </div>
+                          </div>
+
+                          <div className="w-[90px]">
+                            <p className="text-xs text-muted-foreground mb-0.5">Block</p>
+                            <p className="text-xs font-mono">
+                              {tx.block > 0 ? `#${tx.block}` : "pending"}
+                            </p>
+                          </div>
+
+                          <div className="w-[90px] text-right">
+                            <p className="text-xs text-muted-foreground mb-0.5">Time</p>
+                            <p className="text-xs font-mono">{tx.timestamp}</p>
+                          </div>
                         </div>
-                        <ArrowRight className="w-3.5 h-3.5 text-muted-foreground flex-shrink-0" />
-                        <div className="flex-1">
-                          <p className="text-xs text-muted-foreground mb-0.5">To</p>
-                          <button
-                            type="button"
-                            onClick={() => onWalletSelect(tx.to)}
-                            className={`text-xs font-mono rounded px-1 -mx-1 transition-colors ${
-                              tx.toLabel
-                                ? selectedWallet === tx.to
-                                  ? "text-amber-300 bg-amber-500/15"
-                                  : "text-amber-400 hover:text-amber-300 hover:bg-amber-500/10"
-                                : selectedWallet === tx.to
-                                  ? "text-primary bg-primary/15"
-                                  : "hover:text-primary hover:bg-primary/10"
-                            }`}
-                          >
-                            {tx.to}
-                          </button>
-                          {tx.toLabel ? (
-                            <span className="ml-1 inline-flex items-center rounded border border-amber-500/30 bg-amber-500/12 px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide text-amber-300">
-                              {tx.toLabel}
-                            </span>
-                          ) : null}
-                        </div>
-                      </div>
-
-                      <div className="w-[120px] text-right">
-                        <p className="text-xs text-muted-foreground mb-0.5">Amount</p>
-                        <p
-                          className={`text-sm font-bold ${
-                            tx.type === "inflow" ? "text-success" : "text-destructive"
-                          }`}
-                        >
-                          {tx.type === "inflow" ? "+" : "-"}
-                          {tx.amount} {tokenLabel}
-                        </p>
-                      </div>
-
-                      <div className="w-[120px]">
-                        <p className="text-xs text-muted-foreground mb-0.5">Gas Fee</p>
-                        <div className="flex items-center gap-1">
-                          <Fuel className="w-3 h-3 text-muted-foreground" />
-                          <p className="text-xs font-mono">{tx.fee}</p>
-                        </div>
-                      </div>
-
-                      <div className="w-[90px]">
-                        <p className="text-xs text-muted-foreground mb-0.5">Block</p>
-                        <p className="text-xs font-mono">
-                          {tx.block > 0 ? `#${tx.block}` : "pending"}
-                        </p>
-                      </div>
-
-                      <div className="w-[90px] text-right">
-                        <p className="text-xs text-muted-foreground mb-0.5">Time</p>
-                        <p className="text-xs font-mono">{tx.timestamp}</p>
-                      </div>
-                    </div>
+                      );
+                    })()}
                   </motion.div>
                 ))}
               </AnimatePresence>

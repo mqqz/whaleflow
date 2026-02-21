@@ -87,29 +87,35 @@ const buildGraphData = (transactions: LiveTransaction[]) => {
 
     const sourceId = tx.from || "unknown";
     const targetId = tx.to || "unknown";
+    const sourceType: GraphNode["type"] =
+      tx.fromLabel && tx.fromLabel !== "unlabeled"
+        ? "exchange"
+        : classifyNodeType(sourceId, amount);
+    const targetType: GraphNode["type"] =
+      tx.toLabel && tx.toLabel !== "unlabeled" ? "exchange" : classifyNodeType(targetId, amount);
 
     if (!nodes.has(sourceId)) {
       nodes.set(sourceId, {
         id: sourceId,
-        type: classifyNodeType(sourceId, amount),
+        type: sourceType,
         value: amount,
       });
     } else {
       const source = nodes.get(sourceId)!;
       source.value += amount;
-      source.type = mergeNodeType(source.type, classifyNodeType(sourceId, amount));
+      source.type = mergeNodeType(source.type, sourceType);
     }
 
     if (!nodes.has(targetId)) {
       nodes.set(targetId, {
         id: targetId,
-        type: classifyNodeType(targetId, amount),
+        type: targetType,
         value: amount,
       });
     } else {
       const target = nodes.get(targetId)!;
       target.value += amount;
-      target.type = mergeNodeType(target.type, classifyNodeType(targetId, amount));
+      target.type = mergeNodeType(target.type, targetType);
     }
 
     const key = `${sourceId}=>${targetId}`;

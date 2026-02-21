@@ -1,4 +1,17 @@
-import { ArrowDownLeft, ArrowUpRight, Fuel, Wallet, TrendingUp, TrendingDown } from "lucide-react";
+import {
+  ArrowDownLeft,
+  ArrowUpRight,
+  Check,
+  ChevronLeft,
+  ChevronRight,
+  Copy,
+  ExternalLink,
+  Fuel,
+  Wallet,
+  TrendingDown,
+  TrendingUp,
+} from "lucide-react";
+import { useState } from "react";
 import { ScrollArea } from "./ui/scroll-area";
 import { LiveTransaction } from "../hooks/useLiveTransactions";
 
@@ -7,6 +20,9 @@ interface RightSidebarProps {
   selectedWallet: string | null;
   transactions: LiveTransaction[];
   onWalletSelect: (wallet: string) => void;
+  onOpenWalletInExplorer: (wallet: string) => void;
+  expanded: boolean;
+  onExpandedChange: (expanded: boolean) => void;
 }
 
 const tokenLabels: Record<string, string> = {
@@ -24,10 +40,24 @@ export function RightSidebar({
   selectedWallet,
   transactions,
   onWalletSelect,
+  onOpenWalletInExplorer,
+  expanded,
+  onExpandedChange,
 }: RightSidebarProps) {
+  const [copied, setCopied] = useState(false);
   const tokenLabel = tokenLabels[token] ?? token.toUpperCase();
   const selected = selectedWallet?.trim() ?? "";
   const hasSelection = selected.length > 0;
+  const resolvedFullWallet = hasSelection
+    ? (transactions.find((tx) => tx.from === selected && tx.fromFull)?.fromFull ??
+      transactions.find((tx) => tx.to === selected && tx.toFull)?.toFull ??
+      selected)
+    : "";
+  const explorerUrl = resolvedFullWallet
+    ? token === "btc"
+      ? `https://mempool.space/address/${resolvedFullWallet}`
+      : `https://etherscan.io/address/${resolvedFullWallet}`
+    : "";
 
   const walletTransactions = hasSelection
     ? transactions.filter((tx) => tx.from === selected || tx.to === selected)
@@ -49,18 +79,85 @@ export function RightSidebar({
   const latestActivity = walletTransactions[0]?.timestamp ?? "--";
   const recentTransactions = walletTransactions.slice(0, 12);
 
+  if (!expanded) {
+    return (
+      <div className="w-[52px] self-stretch bg-card/60 backdrop-blur-sm border border-border/60 rounded-xl p-2">
+        <button
+          type="button"
+          onClick={() => onExpandedChange(true)}
+          className="w-full h-10 inline-flex items-center justify-center rounded-md border border-border/40 bg-card/50 text-muted-foreground transition-colors hover:text-primary"
+          aria-label="Expand wallet details"
+          title="Expand wallet details"
+        >
+          <ChevronLeft className="w-4 h-4" />
+        </button>
+      </div>
+    );
+  }
+
   return (
     <div className="w-[280px] self-stretch bg-card/60 backdrop-blur-sm border border-border/60 rounded-xl p-4 space-y-4">
       <div className="flex items-center gap-2 pb-2 border-b border-border/50">
         <Wallet className="w-4 h-4 text-primary" />
         <h3 className="font-semibold text-sm">Wallet Details</h3>
+        <button
+          type="button"
+          onClick={() => onExpandedChange(false)}
+          className="ml-auto inline-flex h-6 w-6 items-center justify-center rounded border border-border/40 bg-card/50 text-muted-foreground transition-colors hover:text-primary"
+          aria-label="Collapse wallet details"
+          title="Collapse wallet details"
+        >
+          <ChevronRight className="w-3.5 h-3.5" />
+        </button>
       </div>
 
       {hasSelection ? (
         <>
+          <button
+            type="button"
+            onClick={() => onOpenWalletInExplorer(resolvedFullWallet)}
+            className="w-full inline-flex items-center justify-center gap-2 rounded-lg border border-border/40 bg-card/50 px-3 py-2 text-xs font-medium text-muted-foreground transition-colors hover:text-primary"
+          >
+            <ExternalLink className="h-3.5 w-3.5" />
+            View In WhaleFlow Explorer
+          </button>
+
           <div className="p-4 bg-gradient-to-br from-primary/10 to-accent/5 rounded-lg border border-primary/20">
-            <p className="text-xs text-muted-foreground mb-1">Active Wallet</p>
-            <p className="font-mono text-sm font-semibold text-primary break-all">{selected}</p>
+            <div className="mb-1 flex items-center justify-between gap-2">
+              <p className="text-xs text-muted-foreground">Active Wallet</p>
+              <div className="flex items-center gap-1">
+                <a
+                  href={explorerUrl}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="inline-flex h-6 w-6 items-center justify-center rounded border border-border/40 bg-card/50 text-muted-foreground transition-colors hover:text-primary"
+                  aria-label="View in explorer"
+                  title="View in explorer"
+                >
+                  <ExternalLink className="h-3.5 w-3.5" />
+                </a>
+                <button
+                  type="button"
+                  onClick={async () => {
+                    try {
+                      await navigator.clipboard.writeText(resolvedFullWallet);
+                      setCopied(true);
+                      window.setTimeout(() => setCopied(false), 1400);
+                    } catch {
+                      // Ignore clipboard failures.
+                    }
+                  }}
+                  className="inline-flex h-6 w-6 items-center justify-center rounded border border-border/40 bg-card/50 text-muted-foreground transition-colors hover:text-primary"
+                  aria-label="Copy wallet address"
+                  title={copied ? "Copied" : "Copy address"}
+                >
+                  {copied ? <Check className="h-3.5 w-3.5" /> : <Copy className="h-3.5 w-3.5" />}
+                </button>
+              </div>
+            </div>
+            <p className="font-mono text-sm font-semibold text-primary break-all">
+              {resolvedFullWallet}
+            </p>
           </div>
 
           <div className="p-4 bg-secondary/30 rounded-lg border border-border/30 space-y-1">
