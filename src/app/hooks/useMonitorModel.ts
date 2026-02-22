@@ -46,8 +46,6 @@ interface UseMonitorModelResult {
   top24hAvailable: boolean;
 }
 
-const LIVE_BUCKET_MS = 5 * 60 * 1000;
-
 const normalizeNode = (value: string) => value.replace(/^tier:/, "").replace(/^cex:/, "");
 
 export function useMonitorModel({
@@ -63,8 +61,12 @@ export function useMonitorModel({
     if (!isEth) {
       return [];
     }
-    const byBucket = new Map<number, FlowPoint>();
-    for (const tx of liveTransactions) {
+    const points: FlowPoint[] = [];
+    // `liveTransactions` is newest-first; chart needs oldest-first for left-to-right time movement.
+    const chronological = [...liveTransactions].sort((a, b) => a.timestampMs - b.timestampMs);
+    let lastTs = 0;
+
+    for (const tx of chronological) {
       if (tx.channel !== "wallet") {
         continue;
       }
@@ -77,22 +79,27 @@ export function useMonitorModel({
       if (fromIsExchange === toIsExchange) {
         continue;
       }
-      const bucketTs = Math.floor(tx.timestampMs / LIVE_BUCKET_MS) * LIVE_BUCKET_MS;
-      const current = byBucket.get(bucketTs) ?? {
-        ts: bucketTs,
-        inflow: 0,
-        outflow: 0,
-        net: 0,
-      };
+
+      // Keep timestamps strictly increasing so every accepted point advances right on the x-axis.
+      const ts = tx.timestampMs <= lastTs ? lastTs + 1 : tx.timestampMs;
+      lastTs = ts;
+
+      let inflow = 0;
+      let outflow = 0;
       if (toIsExchange) {
-        current.inflow += amount;
+        inflow = amount;
       } else {
-        current.outflow += amount;
+        outflow = amount;
       }
-      current.net = current.outflow - current.inflow;
-      byBucket.set(bucketTs, current);
+      points.push({
+        ts,
+        inflow,
+        outflow,
+        net: outflow - inflow,
+      });
     }
-    return [...byBucket.values()].sort((a, b) => a.ts - b.ts);
+
+    return points;
   }, [isEth, liveTransactions]);
 
   const top24hFlowSeries = useMemo<FlowPoint[]>(() => {

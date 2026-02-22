@@ -35,6 +35,28 @@ const parseNumeric = (value: string) => {
   return Number.isFinite(parsed) ? parsed : 0;
 };
 
+const resolveDistinctCexLabel = (wallet: string, transactions: LiveTransaction[]) => {
+  const labelCounts = new Map<string, number>();
+  for (const tx of transactions) {
+    if (tx.from === wallet && tx.fromLabel && tx.fromLabel !== "unlabeled") {
+      labelCounts.set(tx.fromLabel, (labelCounts.get(tx.fromLabel) ?? 0) + 1);
+    }
+    if (tx.to === wallet && tx.toLabel && tx.toLabel !== "unlabeled") {
+      labelCounts.set(tx.toLabel, (labelCounts.get(tx.toLabel) ?? 0) + 1);
+    }
+  }
+
+  let selected: string | null = null;
+  let bestCount = 0;
+  for (const [label, count] of labelCounts.entries()) {
+    if (count > bestCount) {
+      selected = label;
+      bestCount = count;
+    }
+  }
+  return selected;
+};
+
 export function RightSidebar({
   token,
   selectedWallet,
@@ -62,6 +84,7 @@ export function RightSidebar({
   const walletTransactions = hasSelection
     ? transactions.filter((tx) => tx.from === selected || tx.to === selected)
     : [];
+  const distinctCexLabel = hasSelection ? resolveDistinctCexLabel(selected, transactions) : null;
 
   const inflow = walletTransactions.reduce(
     (sum, tx) => sum + (tx.to === selected ? parseNumeric(tx.amount) : 0),
@@ -81,7 +104,7 @@ export function RightSidebar({
 
   if (!expanded) {
     return (
-      <div className="w-[52px] self-stretch bg-card/60 backdrop-blur-sm border border-border/60 rounded-xl p-2">
+      <div className="h-full w-[52px] self-stretch bg-card/60 backdrop-blur-sm border border-border/60 rounded-xl p-2">
         <button
           type="button"
           onClick={() => onExpandedChange(true)}
@@ -96,7 +119,7 @@ export function RightSidebar({
   }
 
   return (
-    <div className="w-[280px] self-stretch bg-card/60 backdrop-blur-sm border border-border/60 rounded-xl p-4 space-y-4">
+    <div className="h-full w-[280px] self-stretch bg-card/60 backdrop-blur-sm border border-border/60 rounded-xl p-4 space-y-4 overflow-y-auto">
       <div className="flex items-center gap-2 pb-2 border-b border-border/50">
         <Wallet className="w-4 h-4 text-primary" />
         <h3 className="font-semibold text-sm">Wallet Details</h3>
@@ -159,6 +182,13 @@ export function RightSidebar({
               {resolvedFullWallet}
             </p>
           </div>
+
+          {distinctCexLabel ? (
+            <div className="p-4 bg-amber-500/10 rounded-lg border border-amber-500/30">
+              <p className="text-xs text-amber-300/90 mb-1">Label</p>
+              <p className="text-sm font-semibold text-amber-200 break-all">{distinctCexLabel}</p>
+            </div>
+          ) : null}
 
           <div className="p-4 bg-secondary/30 rounded-lg border border-border/30 space-y-1">
             <p className="text-xs text-muted-foreground">Net Flow</p>

@@ -11,8 +11,7 @@ import {
 import { whale } from "@lucide/lab";
 import { motion, AnimatePresence } from "motion/react";
 import { ReactNode } from "react";
-import { LiveTransaction } from "../hooks/useLiveTransactions";
-import { Button } from "./ui/button";
+import { ConnectionStatus, LiveTransaction } from "../hooks/useLiveTransactions";
 import { Switch } from "./ui/switch";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "./ui/collapsible";
 import { MonitorEdgeFeedRow, MonitorFeedMode } from "../hooks/useMonitorModel";
@@ -26,6 +25,8 @@ interface TransactionFeedProps {
   feedTitle: string;
   feedSubtitle: string;
   edgeRows: MonitorEdgeFeedRow[];
+  pauseStream: boolean;
+  status: ConnectionStatus;
   slowMode: boolean;
   onSlowModeChange: (value: boolean) => void;
   controlsOpen: boolean;
@@ -99,6 +100,8 @@ export function TransactionFeed({
   feedTitle,
   feedSubtitle,
   edgeRows,
+  pauseStream,
+  status,
   slowMode,
   onSlowModeChange,
   controlsOpen,

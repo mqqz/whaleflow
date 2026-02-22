@@ -346,6 +346,7 @@ export function NetworkGraph({
     () => (isEdgeMode ? buildGraphDataFromEdges(edgePoints ?? []) : buildGraphData(transactions)),
     [edgePoints, isEdgeMode, transactions],
   );
+  const hasNodes = graphData.nodes.length > 0;
 
   useEffect(() => {
     if (!svgRef.current) {
@@ -745,24 +746,37 @@ export function NetworkGraph({
 
   return (
     <div className="relative h-full w-full bg-card/30 backdrop-blur-sm rounded-xl border border-border/50 overflow-hidden group">
-      <div className="absolute bottom-4 right-4 p-2.5 bg-transparent rounded-lg border-0 z-10">
-        <div className="space-y-1.5 text-xs">
-          <div className="flex items-center gap-2">
-            <div className="w-2.5 h-2.5 rounded-full bg-[#F43F5E]" />
-            <span>Whale</span>
-          </div>
-          <div className="flex items-center gap-2">
-            <div className="w-2.5 h-2.5 rounded-full bg-[#F59E0B]" />
-            <span>Exchange</span>
-          </div>
-          <div className="flex items-center gap-2">
-            <div className="w-2.5 h-2.5 rounded-full bg-[#3B82F6]" />
-            <span>Wallet</span>
+      {hasNodes ? (
+        <div className="absolute bottom-4 right-4 p-2.5 bg-transparent rounded-lg border-0 z-10">
+          <div className="space-y-1.5 text-xs">
+            <div className="flex items-center gap-2">
+              <div className="w-2.5 h-2.5 rounded-full bg-[#F43F5E]" />
+              <span>Whale</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <div className="w-2.5 h-2.5 rounded-full bg-[#F59E0B]" />
+              <span>Exchange</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <div className="w-2.5 h-2.5 rounded-full bg-[#3B82F6]" />
+              <span>Wallet</span>
+            </div>
           </div>
         </div>
-      </div>
+      ) : (
+        <div className="absolute inset-0 z-10 grid place-items-center text-sm text-muted-foreground pointer-events-none">
+          <span className="inline-flex items-center gap-0.5">
+            <span>Waiting for transactions to come in</span>
+            <span className="inline-flex">
+              <span className="animate-pulse [animation-delay:0ms]">.</span>
+              <span className="animate-pulse [animation-delay:180ms]">.</span>
+              <span className="animate-pulse [animation-delay:360ms]">.</span>
+            </span>
+          </span>
+        </div>
+      )}
 
-      {hoveredNode ? (
+      {hasNodes && hoveredNode ? (
         <div className="absolute bottom-4 left-4 px-2 py-1 text-xs rounded border border-border/50 bg-card/85 text-muted-foreground z-10 font-mono">
           {formatNodeLabel(hoveredNode)}
         </div>
