@@ -51,7 +51,6 @@ export default function App() {
       {/* Top Navigation */}
       <TopNavigation
         token={token}
-        status={status}
         activeSection={activeSection}
         onTokenChange={setToken}
         onSectionChange={setActiveSection}

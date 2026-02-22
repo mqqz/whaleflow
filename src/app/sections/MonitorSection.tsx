@@ -1,10 +1,14 @@
 import { useEffect, useState } from "react";
+import { ChevronDown, Pause, Play } from "lucide-react";
 import { FeedControlsPanel } from "../components/FeedControlsPanel";
 import { RightSidebar } from "../components/RightSidebar";
 import { MonitorFlowChart } from "../components/MonitorFlowChart";
 import { MonitorInsightCard } from "../components/MonitorInsightCard";
 import { NetworkGraph } from "../components/NetworkGraph";
 import { TransactionFeed } from "../components/TransactionFeed";
+import { LiveStatusBadge } from "../components/LiveStatusBadge";
+import { Button } from "../components/ui/button";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "../components/ui/collapsible";
 import { useLiveTransactions, type LiveTransaction } from "../hooks/useLiveTransactions";
 import { useMonitorModel } from "../hooks/useMonitorModel";
 
@@ -56,6 +60,7 @@ export function MonitorSection({
 }: MonitorSectionProps) {
   const [mainChartMode, setMainChartMode] = useState<"line" | "network">("line");
   const [sidebarExpanded, setSidebarExpanded] = useState(false);
+  const [monitorBarOpen, setMonitorBarOpen] = useState(true);
   const monitorModel = useMonitorModel({
     token,
     liveTransactions: transactions,
@@ -70,8 +75,81 @@ export function MonitorSection({
 
   return (
     <div className="mt-16 pl-3 pr-0 pb-3 min-h-[calc(100dvh-4rem)]">
+      <div className="sticky top-16 z-40 pr-3 pb-0 pt-2">
+        <Collapsible open={monitorBarOpen} onOpenChange={setMonitorBarOpen}>
+          <div className="w-full rounded-xl border border-border/60 bg-card/80 backdrop-blur-sm">
+            <CollapsibleTrigger asChild>
+              <button
+                type="button"
+                className="flex w-full items-center justify-between px-4 py-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground transition-colors hover:text-foreground"
+              >
+                <span>Monitor Feed Controls</span>
+                <ChevronDown
+                  className={`h-4 w-4 transition-transform ${monitorBarOpen ? "rotate-180" : ""}`}
+                />
+              </button>
+            </CollapsibleTrigger>
+            <CollapsibleContent className="border-t border-border/50">
+              <div className="flex items-center justify-between px-4 py-2.5">
+                <div className="inline-flex items-center rounded-md border border-border/60 bg-background/25 overflow-hidden">
+                  <button
+                    type="button"
+                    onClick={() => monitorModel.setFeedMode("live")}
+                    className={`h-8 px-3 text-xs uppercase transition-colors ${
+                      monitorModel.feedMode === "live"
+                        ? "bg-secondary text-foreground"
+                        : "text-muted-foreground hover:text-foreground"
+                    }`}
+                  >
+                    Live
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => monitorModel.setFeedMode("top24h")}
+                    disabled={!monitorModel.top24hAvailable}
+                    className={`h-8 px-3 text-xs uppercase transition-colors disabled:opacity-40 ${
+                      monitorModel.feedMode === "top24h"
+                        ? "bg-secondary text-foreground"
+                        : "text-muted-foreground hover:text-foreground"
+                    }`}
+                  >
+                    24H
+                  </button>
+                </div>
+                <div className="flex items-center gap-2">
+                  {monitorModel.feedMode === "live" ? (
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="icon"
+                      onClick={() => onPauseStreamChange(!pauseStream)}
+                      aria-pressed={pauseStream}
+                      className={`h-8 w-8 rounded-full ${
+                        pauseStream
+                          ? "text-success hover:text-success"
+                          : "text-amber-500 hover:text-amber-500"
+                      }`}
+                    >
+                      {pauseStream ? <Play className="w-4 h-4" /> : <Pause className="w-4 h-4" />}
+                    </Button>
+                  ) : null}
+                  {monitorModel.feedMode === "live" ? (
+                    <LiveStatusBadge
+                      status={status}
+                      paused={pauseStream}
+                      className="hidden sm:inline-flex"
+                    />
+                  ) : null}
+                </div>
+              </div>
+            </CollapsibleContent>
+          </div>
+        </Collapsible>
+      </div>
       <div className="flex gap-3 min-h-[calc(100dvh-4rem)]">
-        <div className="flex-1 flex flex-col gap-3 pt-3">
+        <div className="flex-1 flex flex-col gap-3 pt-2">
+          <MonitorInsightCard insight={monitorModel.insight} />
+
           <div style={{ height: `${MONITOR_TOP_HEIGHT}px` }}>
             {mainChartMode === "line" ? (
               <MonitorFlowChart
@@ -80,8 +158,6 @@ export function MonitorSection({
                 error={monitorModel.flowError}
                 asOfLabel={monitorModel.asOfLabel}
                 feedMode={monitorModel.feedMode}
-                top24hAvailable={monitorModel.top24hAvailable}
-                onFeedModeChange={monitorModel.setFeedMode}
                 chartMode={mainChartMode}
                 onChartModeChange={setMainChartMode}
               />
@@ -96,48 +172,21 @@ export function MonitorSection({
                         : `Exchange-centric 24H edges (BigQuery snapshot as of ${monitorModel.asOfLabel})`}
                     </p>
                   </div>
-                  <div className="flex items-center gap-2">
-                    <div className="inline-flex items-center rounded-md border border-border/60 bg-background/25 overflow-hidden">
-                      <button
-                        type="button"
-                        onClick={() => setMainChartMode("line")}
-                        className="h-8 px-3 text-xs uppercase transition-colors text-muted-foreground hover:text-foreground"
-                      >
-                        Line
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => setMainChartMode("network")}
-                        className="h-8 px-3 text-xs uppercase transition-colors bg-secondary text-foreground"
-                      >
-                        Network
-                      </button>
-                    </div>
-                    <div className="inline-flex items-center rounded-md border border-border/60 bg-background/25 overflow-hidden">
-                      <button
-                        type="button"
-                        onClick={() => monitorModel.setFeedMode("live")}
-                        className={`h-8 px-3 text-xs uppercase transition-colors ${
-                          monitorModel.feedMode === "live"
-                            ? "bg-secondary text-foreground"
-                            : "text-muted-foreground hover:text-foreground"
-                        }`}
-                      >
-                        Live
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => monitorModel.setFeedMode("top24h")}
-                        disabled={!monitorModel.top24hAvailable}
-                        className={`h-8 px-3 text-xs uppercase transition-colors disabled:opacity-40 ${
-                          monitorModel.feedMode === "top24h"
-                            ? "bg-secondary text-foreground"
-                            : "text-muted-foreground hover:text-foreground"
-                        }`}
-                      >
-                        24H
-                      </button>
-                    </div>
+                  <div className="inline-flex items-center rounded-md border border-border/60 bg-background/25 overflow-hidden">
+                    <button
+                      type="button"
+                      onClick={() => setMainChartMode("line")}
+                      className="h-8 px-3 text-xs uppercase transition-colors text-muted-foreground hover:text-foreground"
+                    >
+                      Line
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setMainChartMode("network")}
+                      className="h-8 px-3 text-xs uppercase transition-colors bg-secondary text-foreground"
+                    >
+                      Network
+                    </button>
                   </div>
                 </div>
                 <div className="mt-3 flex-1 min-h-0">
@@ -155,8 +204,6 @@ export function MonitorSection({
             )}
           </div>
 
-          <MonitorInsightCard insight={monitorModel.insight} />
-
           <div
             style={{
               minHeight: `calc(100dvh - 4rem - ${MONITOR_TOP_HEIGHT}px - ${MONITOR_INSIGHT_HEIGHT}px - 2.25rem)`,
@@ -171,10 +218,7 @@ export function MonitorSection({
               feedTitle={monitorModel.feedTitle}
               feedSubtitle={monitorModel.feedSubtitle}
               edgeRows={monitorModel.edgeRows}
-              status={status}
-              pauseStream={pauseStream}
               slowMode={slowMode}
-              onPauseStreamChange={onPauseStreamChange}
               onSlowModeChange={onSlowModeChange}
               controlsOpen={controlsOpen}
               onControlsOpenChange={onControlsOpenChange}
@@ -193,15 +237,17 @@ export function MonitorSection({
           </div>
         </div>
 
-        <RightSidebar
-          token={token}
-          selectedWallet={selectedWallet}
-          transactions={visibleTransactions}
-          onWalletSelect={onWalletSelect}
-          onOpenWalletInExplorer={onOpenWalletInExplorer}
-          expanded={sidebarExpanded}
-          onExpandedChange={setSidebarExpanded}
-        />
+        <div className="self-stretch flex pt-2">
+          <RightSidebar
+            token={token}
+            selectedWallet={selectedWallet}
+            transactions={visibleTransactions}
+            onWalletSelect={onWalletSelect}
+            onOpenWalletInExplorer={onOpenWalletInExplorer}
+            expanded={sidebarExpanded}
+            onExpandedChange={setSidebarExpanded}
+          />
+        </div>
       </div>
     </div>
   );

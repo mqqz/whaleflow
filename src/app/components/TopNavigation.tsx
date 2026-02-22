@@ -1,7 +1,6 @@
 import { useState } from "react";
 import { Activity } from "lucide-react";
 import { motion } from "motion/react";
-import { ConnectionStatus } from "../hooks/useLiveTransactions";
 import {
   Select,
   SelectContent,
@@ -13,32 +12,10 @@ import {
 
 interface TopNavigationProps {
   token: string;
-  status: ConnectionStatus;
   activeSection: TopNavSection;
   onTokenChange: (value: string) => void;
   onSectionChange: (section: TopNavSection) => void;
 }
-
-const statusLabel: Record<ConnectionStatus, string> = {
-  connecting: "CONNECTING",
-  live: "LIVE",
-  reconnecting: "RECONNECTING",
-  error: "ERROR",
-};
-
-const statusColor: Record<ConnectionStatus, string> = {
-  connecting: "bg-amber-500",
-  live: "bg-success",
-  reconnecting: "bg-amber-500",
-  error: "bg-destructive",
-};
-
-const statusBadgeClass: Record<ConnectionStatus, string> = {
-  connecting: "bg-amber-500/10 border-amber-500/30 text-amber-500",
-  live: "bg-success/10 border-success/30 text-success",
-  reconnecting: "bg-amber-500/10 border-amber-500/30 text-amber-500",
-  error: "bg-destructive/10 border-destructive/30 text-destructive",
-};
 
 const iconPath = (filename: string) => `${import.meta.env.BASE_URL}icons/${filename}`;
 
@@ -82,7 +59,6 @@ function SelectorIcon({ src, label }: { src: string; label: string }) {
 
 export function TopNavigation({
   token,
-  status,
   activeSection,
   onTokenChange,
   onSectionChange,
@@ -175,22 +151,7 @@ export function TopNavigation({
         </div>
 
         {/* Right */}
-        <div className="flex items-center gap-4 justify-self-end">
-          {/* Live Indicator */}
-          <div
-            className={`hidden sm:flex items-center gap-2 px-3 py-1.5 border rounded-lg ${statusBadgeClass[status]}`}
-          >
-            <div className="relative">
-              <div className={`w-2 h-2 rounded-full animate-pulse ${statusColor[status]}`} />
-              {status !== "error" && (
-                <div
-                  className={`absolute inset-0 w-2 h-2 rounded-full animate-ping ${statusColor[status]}`}
-                />
-              )}
-            </div>
-            <span className="text-xs font-semibold tracking-wider">{statusLabel[status]}</span>
-          </div>
-        </div>
+        <div className="justify-self-end" />
       </div>
     </div>
   );

@@ -5,15 +5,13 @@ import {
   Fuel,
   Icon,
   Layers,
-  Pause,
-  Play,
   SlidersHorizontal,
   TimerReset,
 } from "lucide-react";
 import { whale } from "@lucide/lab";
 import { motion, AnimatePresence } from "motion/react";
 import { ReactNode } from "react";
-import { ConnectionStatus, LiveTransaction } from "../hooks/useLiveTransactions";
+import { LiveTransaction } from "../hooks/useLiveTransactions";
 import { Button } from "./ui/button";
 import { Switch } from "./ui/switch";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "./ui/collapsible";
@@ -23,15 +21,12 @@ interface TransactionFeedProps {
   network: string;
   token: string;
   minAmount: number;
-  status: ConnectionStatus;
   transactions: LiveTransaction[];
   feedMode: MonitorFeedMode;
   feedTitle: string;
   feedSubtitle: string;
   edgeRows: MonitorEdgeFeedRow[];
-  pauseStream: boolean;
   slowMode: boolean;
-  onPauseStreamChange: (value: boolean) => void;
   onSlowModeChange: (value: boolean) => void;
   controlsOpen: boolean;
   onControlsOpenChange: (open: boolean) => void;
@@ -39,32 +34,6 @@ interface TransactionFeedProps {
   onWalletSelect: (wallet: string) => void;
   controlsPanel?: ReactNode;
 }
-
-const statusUi: Record<
-  ConnectionStatus,
-  { title: string; dotClass: string; animateClass: string }
-> = {
-  connecting: {
-    title: "Connecting",
-    dotClass: "bg-amber-500",
-    animateClass: "animate-pulse",
-  },
-  live: {
-    title: "Live",
-    dotClass: "bg-success",
-    animateClass: "animate-pulse",
-  },
-  reconnecting: {
-    title: "Reconnecting",
-    dotClass: "bg-amber-500",
-    animateClass: "animate-pulse",
-  },
-  error: {
-    title: "Disconnected",
-    dotClass: "bg-destructive",
-    animateClass: "",
-  },
-};
 
 const tokenLabels: Record<string, string> = {
   btc: "BTC",
@@ -125,15 +94,12 @@ export function TransactionFeed({
   network,
   token,
   minAmount,
-  status,
   transactions,
   feedMode,
   feedTitle,
   feedSubtitle,
   edgeRows,
-  pauseStream,
   slowMode,
-  onPauseStreamChange,
   onSlowModeChange,
   controlsOpen,
   onControlsOpenChange,
@@ -143,20 +109,6 @@ export function TransactionFeed({
 }: TransactionFeedProps) {
   const upperNetwork = network.toUpperCase();
   const tokenLabel = tokenLabels[token] ?? token.toUpperCase();
-  const statusMeta =
-    feedMode === "live"
-      ? pauseStream
-        ? {
-            title: "Paused",
-            dotClass: "bg-amber-500",
-            animateClass: "",
-          }
-        : statusUi[status]
-      : {
-          title: "Snapshot",
-          dotClass: "bg-blue-500",
-          animateClass: "",
-        };
 
   return (
     <div className="bg-card/60 backdrop-blur-sm border border-border/60 rounded-xl min-h-[calc(100dvh-4rem-420px-1.5rem)]">
@@ -165,34 +117,6 @@ export function TransactionFeed({
           <div className="flex items-center justify-between px-6 py-3 border-b border-border/50 text-sm">
             <div className="flex items-center gap-2">
               <h3 className="font-semibold text-base">{feedTitle}</h3>
-              <div className="ml-2 inline-flex items-center gap-0.5">
-                <div className="inline-flex items-center gap-1.5 text-sm text-muted-foreground">
-                  <span
-                    className={`w-2 h-2 rounded-full ${statusMeta.dotClass} ${statusMeta.animateClass}`}
-                  />
-                  <span>{statusMeta.title}</span>
-                </div>
-                {feedMode === "live" ? (
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="icon"
-                    onClick={() => onPauseStreamChange(!pauseStream)}
-                    aria-pressed={pauseStream}
-                    className={`h-7 w-7 rounded-full ${
-                      pauseStream
-                        ? "text-success hover:text-success"
-                        : "text-amber-500 hover:text-amber-500"
-                    }`}
-                  >
-                    {pauseStream ? (
-                      <Play className="w-3.5 h-3.5" />
-                    ) : (
-                      <Pause className="w-3.5 h-3.5" />
-                    )}
-                  </Button>
-                ) : null}
-              </div>
               <p className="ml-2 text-xs text-muted-foreground">{feedSubtitle}</p>
             </div>
             <div className="flex items-center gap-4 text-sm text-muted-foreground">

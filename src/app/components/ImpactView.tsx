@@ -97,9 +97,9 @@ export function ImpactPage({ token }: ImpactPageProps) {
 
   return (
     <div className="mt-16 px-3 pb-3 pt-3 space-y-3">
-      <KpiRow cards={kpiCards} />
-
       <InsightCard insight={impactInsight} statsLabel="Last 1h" suppressStatsFallback />
+
+      <KpiRow cards={kpiCards} />
 
       <FlowPriceChart
         points={model.flowPriceSeries}

@@ -17,8 +17,6 @@ interface MonitorFlowChartProps {
   error: string | null;
   asOfLabel: string;
   feedMode: MonitorFeedMode;
-  top24hAvailable: boolean;
-  onFeedModeChange: (mode: MonitorFeedMode) => void;
   chartMode: "line" | "network";
   onChartModeChange: (mode: "line" | "network") => void;
 }
@@ -48,8 +46,6 @@ export function MonitorFlowChart({
   error,
   asOfLabel,
   feedMode,
-  top24hAvailable,
-  onFeedModeChange,
   chartMode,
   onChartModeChange,
 }: MonitorFlowChartProps) {
@@ -95,31 +91,6 @@ export function MonitorFlowChart({
               }`}
             >
               Network
-            </button>
-          </div>
-          <div className="inline-flex items-center rounded-md border border-border/60 bg-background/25 overflow-hidden">
-            <button
-              type="button"
-              onClick={() => onFeedModeChange("live")}
-              className={`h-8 px-3 text-xs uppercase transition-colors ${
-                feedMode === "live"
-                  ? "bg-secondary text-foreground"
-                  : "text-muted-foreground hover:text-foreground"
-              }`}
-            >
-              Live
-            </button>
-            <button
-              type="button"
-              onClick={() => onFeedModeChange("top24h")}
-              disabled={!top24hAvailable}
-              className={`h-8 px-3 text-xs uppercase transition-colors disabled:opacity-40 ${
-                feedMode === "top24h"
-                  ? "bg-secondary text-foreground"
-                  : "text-muted-foreground hover:text-foreground"
-              }`}
-            >
-              24H
             </button>
           </div>
         </div>
