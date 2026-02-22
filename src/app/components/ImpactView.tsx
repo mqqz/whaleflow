@@ -43,9 +43,9 @@ export function ImpactPage({ token, transactions }: ImpactPageProps) {
       deltaPct: model.kpis.netFlow1h.pct,
     },
     {
-      title: "Whale Volume (1H)",
-      value: `${formatValue(model.kpis.whaleVolume1h.value, 1)} ETH`,
-      deltaPct: model.kpis.whaleVolume1h.pct,
+      title: `Whale Volume (${model.range.toUpperCase()})`,
+      value: `${formatValue(model.kpis.whaleVolumeRange.value, 1)} ETH`,
+      deltaPct: model.kpis.whaleVolumeRange.pct,
       subtitle: `Threshold >= ${model.whaleThresholdEth} ETH`,
     },
     {

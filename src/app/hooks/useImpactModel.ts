@@ -43,7 +43,7 @@ interface UseImpactModelResult {
   cumulativeSeries: Array<{ ts: number; cumulative: number }>;
   kpis: {
     netFlow1h: ImpactKpi;
-    whaleVolume1h: ImpactKpi;
+    whaleVolumeRange: ImpactKpi;
     rollingVol24h: ImpactKpi;
     flowReturnCorr24h: ImpactKpi;
     flowZScore: ImpactKpi;
@@ -277,8 +277,9 @@ export function useImpactModel({
 
     const txInWindow = transactions.filter((tx) => tx.channel === "wallet");
     const nowMs = Date.now();
-    const lastHourStart = nowMs - HOUR_MS;
-    const prevHourStart = nowMs - 2 * HOUR_MS;
+    const whaleWindowMs = RANGE_MS[range];
+    const whaleCurrentStart = nowMs - whaleWindowMs;
+    const whalePrevStart = nowMs - 2 * whaleWindowMs;
 
     const whaleSum = (minTs: number, maxTs: number) =>
       txInWindow
@@ -291,8 +292,8 @@ export function useImpactModel({
           return sum + amount;
         }, 0);
 
-    const whaleCurrent = whaleSum(lastHourStart, nowMs);
-    const whalePrev = whaleSum(prevHourStart, lastHourStart);
+    const whaleCurrent = whaleSum(whaleCurrentStart, nowMs);
+    const whalePrev = whaleSum(whalePrevStart, whaleCurrentStart);
 
     const pricePoints = flowPriceSeries.filter((point) => point.price !== null) as Array<
       ImpactFlowPricePoint & { price: number }
@@ -344,7 +345,7 @@ export function useImpactModel({
         value: lastPoint?.net ?? null,
         pct: toPctChange(lastPoint?.net ?? null, prevPoint?.net ?? null),
       },
-      whaleVolume1h: {
+      whaleVolumeRange: {
         value: whaleCurrent,
         pct: toPctChange(whaleCurrent, whalePrev),
       },
@@ -361,7 +362,7 @@ export function useImpactModel({
         pct: toPctChange(z, zPrev),
       },
     };
-  }, [flowPriceSeries, flowWindow, transactions]);
+  }, [flowPriceSeries, flowWindow, range, transactions]);
 
   const insight = useMemo(() => {
     const corr = kpis.flowReturnCorr24h.value;
