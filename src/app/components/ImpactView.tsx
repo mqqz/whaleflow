@@ -41,11 +41,17 @@ export function ImpactPage({ token }: ImpactPageProps) {
       deltaPct: model.kpis.netExchangeFlow1h.pct,
     },
     {
-      title: "Whale↔Exchange Net Flow (1H)",
+      title: "Whale/Exchange Net Flow (1H)",
       value:
         model.kpis.whaleExchangeNetFlow1h.value === null
           ? "n/a"
           : `${model.kpis.whaleExchangeNetFlow1h.value >= 0 ? "+" : "-"}${formatValue(Math.abs(model.kpis.whaleExchangeNetFlow1h.value), 1)} ETH`,
+      valueClassName:
+        model.kpis.whaleExchangeNetFlow1h.value === null
+          ? ""
+          : model.kpis.whaleExchangeNetFlow1h.value >= 0
+            ? "text-success"
+            : "text-destructive",
       deltaPct: model.kpis.whaleExchangeNetFlow1h.pct,
     },
     {
@@ -55,7 +61,6 @@ export function ImpactPage({ token }: ImpactPageProps) {
           ? "n/a"
           : `${(model.kpis.whaleShare.value * 100).toFixed(1)}%`,
       deltaPct: model.kpis.whaleShare.pct,
-      subtitle: "abs(whale net) / abs(total net)",
     },
     {
       title: "Rolling Volatility (24H)",

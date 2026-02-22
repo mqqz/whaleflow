@@ -19,7 +19,7 @@ interface CexFlowsChartProps {
 }
 
 const tierMeta: Record<string, { color: string; threshold: string }> = {
-  whale: { color: "#F43F5E", threshold: ">= 10000 ETH" },
+  whale: { color: "#F43F5E", threshold: "≥ 10000 ETH" },
   shark: { color: "#F59E0B", threshold: "< 10000 ETH" },
   dolphin: { color: "#10B981", threshold: "< 1000 ETH" },
   shrimp: { color: "#3B82F6", threshold: "< 100 ETH" },
