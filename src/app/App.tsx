@@ -13,6 +13,19 @@ const ExplorerPage = lazy(() =>
   import("./components/ExplorerPage").then((module) => ({ default: module.ExplorerPage })),
 );
 
+const isAddressLikeForExplorer = (value: string | null, network: "bitcoin" | "ethereum") => {
+  const candidate = (value ?? "").trim();
+  if (!candidate) {
+    return false;
+  }
+
+  if (network === "ethereum") {
+    return /^0x[a-fA-F0-9]{40}$/.test(candidate);
+  }
+
+  return /^(bc1|[13])[a-zA-Z0-9]{20,}$/.test(candidate);
+};
+
 export default function App() {
   const IMPACT_HISTORY_SIZE = 600;
   const [token, setToken] = useState("eth");
@@ -24,6 +37,18 @@ export default function App() {
   const [controlsOpen, setControlsOpen] = useState(false);
   const [selectedWallet, setSelectedWallet] = useState<string | null>(null);
   const [activeSection, setActiveSection] = useState<TopNavSection>("monitor");
+  const explorerSelectedWallet = useMemo(
+    () => (isAddressLikeForExplorer(selectedWallet, network) ? selectedWallet : null),
+    [network, selectedWallet],
+  );
+
+  const handleSectionChange = (section: TopNavSection) => {
+    if (section === "explorer" && !isAddressLikeForExplorer(selectedWallet, network)) {
+      setSelectedWallet(null);
+    }
+    setActiveSection(section);
+  };
+
   const { transactions, status } = useLiveTransactions({
     network,
     token,
@@ -53,7 +78,7 @@ export default function App() {
         token={token}
         activeSection={activeSection}
         onTokenChange={setToken}
-        onSectionChange={setActiveSection}
+        onSectionChange={handleSectionChange}
       />
 
       <Suspense fallback={sectionFallback}>
@@ -78,6 +103,9 @@ export default function App() {
             onControlsOpenChange={setControlsOpen}
             onWalletSelect={setSelectedWallet}
             onOpenWalletInExplorer={(wallet) => {
+              if (!isAddressLikeForExplorer(wallet, network)) {
+                return;
+              }
               setSelectedWallet(wallet);
               setActiveSection("explorer");
             }}
@@ -91,7 +119,7 @@ export default function App() {
             network={network}
             token={token}
             transactions={transactions}
-            selectedWallet={selectedWallet}
+            selectedWallet={explorerSelectedWallet}
             onWalletSelect={setSelectedWallet}
           />
         )}

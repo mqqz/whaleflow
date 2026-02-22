@@ -249,6 +249,8 @@ export function MonitorSection({
             token={token}
             selectedWallet={selectedWallet}
             transactions={visibleTransactions}
+            feedMode={monitorModel.feedMode}
+            edgePoints24h={monitorModel.edgePoints24h}
             onWalletSelect={onWalletSelect}
             onOpenWalletInExplorer={onOpenWalletInExplorer}
             expanded={sidebarExpanded}
