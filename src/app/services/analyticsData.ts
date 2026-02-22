@@ -1,3 +1,20 @@
+import { fetchCsv, toSafeDate, toSafeNumber } from "./csv";
+import type {
+  ExchangeFlowPoint,
+  FlowTier,
+  TierExchangeEdge,
+  TierExchangeFlowPoint,
+} from "../types/analytics";
+
+const BASE = "https://storage.googleapis.com/whaleflow";
+const ALLOWED_TIERS: readonly FlowTier[] = ["shrimp", "dolphin", "shark", "whale"];
+
+export const URLS = {
+  exchangeFlowHourly: `${BASE}/agg_exchange_flow_hourly`,
+  tierEdges24h: `${BASE}/agg_tier_exchange_edges_24h`,
+  tierFlowHourly: `${BASE}/agg_tier_exchange_flow_hourly`,
+} as const;
+
 export interface FlowPoint {
   ts: number;
   inflow: number;
@@ -32,86 +49,110 @@ export interface ExchangeAnalyticsData {
   walletToEdges: Map<string, EdgePoint[]>;
 }
 
-interface ManifestDataset {
-  id: string;
-  file: string;
-}
+let exchangeFlowPromise: Promise<ExchangeFlowPoint[]> | null = null;
+let tierEdgesPromise: Promise<TierExchangeEdge[]> | null = null;
+let tierFlowPromise: Promise<TierExchangeFlowPoint[]> | null = null;
+let compatibilityPromise: Promise<ExchangeAnalyticsData> | null = null;
 
-interface DatasetsManifest {
-  datasets?: ManifestDataset[];
-}
+const normalizeNode = (value: string) => value.trim().toLowerCase();
 
-interface DuneEnvelope<T> {
-  execution_ended_at?: string;
-  result?: {
-    rows?: T[];
-  };
-}
-
-interface FlowRowRaw {
-  bucket_ts?: string;
-  exchange_inflow_eth?: number;
-  exchange_outflow_eth?: number;
-  net_flow_eth?: number;
-}
-
-interface CexRowRaw {
-  bucket_ts?: string;
-  cex_name?: string;
-  inflow_eth?: number;
-  outflow_eth?: number;
-  net_flow_eth?: number;
-}
-
-interface EdgeRowRaw {
-  src?: string;
-  dst?: string;
-  src_label?: string;
-  dst_label?: string;
-  total_value_eth?: number;
-  tx_count?: number;
-}
-
-const DATASET_IDS = {
-  flow: "exchange_flow_7d_hourly",
-  byCex: "exchange_netflow_by_cex_7d_hourly",
-  edges: "exchange_network_edges_24h",
-} as const;
-
-let cachePromise: Promise<ExchangeAnalyticsData> | null = null;
-const APP_BASE_URL = import.meta.env.BASE_URL || "/";
-
-const toNumber = (value: unknown) => {
-  if (typeof value === "number" && Number.isFinite(value)) {
-    return value;
+const parseStrictTier = (rawTier: unknown, rowIndex: number): FlowTier => {
+  const normalized = String(rawTier ?? "")
+    .trim()
+    .toLowerCase();
+  if (ALLOWED_TIERS.includes(normalized as FlowTier)) {
+    return normalized as FlowTier;
   }
-  if (typeof value === "string") {
-    const parsed = Number.parseFloat(value);
-    return Number.isFinite(parsed) ? parsed : 0;
-  }
-  return 0;
+  throw new Error(`Invalid tier '${rawTier ?? ""}' at row ${rowIndex + 1}.`);
 };
 
-const toTimestampMs = (value: unknown) => {
-  if (typeof value !== "string") {
-    return null;
+const parseTierLike = (rawTier: unknown) =>
+  String(rawTier ?? "")
+    .trim()
+    .toLowerCase();
+
+const parseNodeType = (value: unknown, field: "src_type" | "dst_type", rowIndex: number) => {
+  const normalized = String(value ?? "")
+    .trim()
+    .toLowerCase();
+  if (normalized === "tier" || normalized === "exchange") {
+    return normalized;
   }
-  const ms = Date.parse(value);
-  return Number.isFinite(ms) ? ms : null;
+  throw new Error(`Invalid ${field} '${value ?? ""}' at row ${rowIndex + 1}.`);
 };
 
-async function fetchJson<T>(path: string): Promise<T> {
-  const resp = await fetch(path, { cache: "no-store" });
-  if (!resp.ok) {
-    throw new Error(`Failed to load ${path}: ${resp.status}`);
+export async function loadExchangeFlowHourly(): Promise<ExchangeFlowPoint[]> {
+  if (exchangeFlowPromise) {
+    return exchangeFlowPromise;
   }
-  return (await resp.json()) as T;
+  exchangeFlowPromise = fetchCsv<ExchangeFlowPoint>(URLS.exchangeFlowHourly, (row, rowIndex) => {
+    const bucketTs = toSafeDate(row.bucket_ts, "bucket_ts", rowIndex);
+    return {
+      bucket_ts: bucketTs,
+      exchange_inflow_eth: toSafeNumber(row.exchange_inflow_eth, "exchange_inflow_eth", rowIndex),
+      exchange_outflow_eth: toSafeNumber(
+        row.exchange_outflow_eth,
+        "exchange_outflow_eth",
+        rowIndex,
+      ),
+      net_flow_eth: toSafeNumber(row.net_flow_eth, "net_flow_eth", rowIndex),
+    };
+  }).then((rows) => rows.sort((a, b) => a.bucket_ts.getTime() - b.bucket_ts.getTime()));
+  return exchangeFlowPromise;
 }
 
-function withBaseUrl(path: string) {
-  const base = APP_BASE_URL.endsWith("/") ? APP_BASE_URL : `${APP_BASE_URL}/`;
-  const normalized = path.startsWith("/") ? path.slice(1) : path;
-  return `${base}${normalized}`;
+export async function loadTierExchangeFlowHourly(): Promise<TierExchangeFlowPoint[]> {
+  if (tierFlowPromise) {
+    return tierFlowPromise;
+  }
+  tierFlowPromise = fetchCsv<TierExchangeFlowPoint>(URLS.tierFlowHourly, (row, rowIndex) => {
+    const bucketTs = toSafeDate(row.bucket_ts, "bucket_ts", rowIndex);
+    const tier = parseStrictTier(row.tier, rowIndex);
+    return {
+      bucket_ts: bucketTs,
+      tier,
+      tier_exchange_inflow_eth: toSafeNumber(
+        row.tier_exchange_inflow_eth,
+        "tier_exchange_inflow_eth",
+        rowIndex,
+      ),
+      tier_exchange_outflow_eth: toSafeNumber(
+        row.tier_exchange_outflow_eth,
+        "tier_exchange_outflow_eth",
+        rowIndex,
+      ),
+      tier_exchange_net_flow_eth: toSafeNumber(
+        row.tier_exchange_net_flow_eth,
+        "tier_exchange_net_flow_eth",
+        rowIndex,
+      ),
+    };
+  }).then((rows) => rows.sort((a, b) => a.bucket_ts.getTime() - b.bucket_ts.getTime()));
+  return tierFlowPromise;
+}
+
+export async function loadTierExchangeEdges24h(): Promise<TierExchangeEdge[]> {
+  if (tierEdgesPromise) {
+    return tierEdgesPromise;
+  }
+  tierEdgesPromise = fetchCsv<TierExchangeEdge>(URLS.tierEdges24h, (row, rowIndex) => {
+    const srcNode = String(row.src_node ?? "").trim();
+    const dstNode = String(row.dst_node ?? "").trim();
+    if (!srcNode || !dstNode) {
+      throw new Error(`Missing src_node or dst_node at row ${rowIndex + 1}.`);
+    }
+    return {
+      src_node: srcNode,
+      dst_node: dstNode,
+      src_type: parseNodeType(row.src_type, "src_type", rowIndex),
+      dst_type: parseNodeType(row.dst_type, "dst_type", rowIndex),
+      tier: parseTierLike(row.tier),
+      cex_name: String(row.cex_name ?? "").trim(),
+      total_value_eth: toSafeNumber(row.total_value_eth, "total_value_eth", rowIndex),
+      tx_count: Math.max(0, Math.round(toSafeNumber(row.tx_count, "tx_count", rowIndex))),
+    };
+  }).then((rows) => rows.sort((a, b) => b.total_value_eth - a.total_value_eth));
+  return tierEdgesPromise;
 }
 
 function indexFlowByHour(series: FlowPoint[]) {
@@ -141,128 +182,79 @@ function indexCexPoints(series: CexFlowPoint[]) {
 function indexWalletEdges(edges: EdgePoint[]) {
   const walletToEdges = new Map<string, EdgePoint[]>();
   for (const edge of edges) {
-    const srcRows = walletToEdges.get(edge.src) ?? [];
-    srcRows.push(edge);
-    walletToEdges.set(edge.src, srcRows);
+    const src = normalizeNode(edge.src);
+    const dst = normalizeNode(edge.dst);
 
-    if (edge.dst !== edge.src) {
-      const dstRows = walletToEdges.get(edge.dst) ?? [];
+    const srcRows = walletToEdges.get(src) ?? [];
+    srcRows.push(edge);
+    walletToEdges.set(src, srcRows);
+
+    if (dst !== src) {
+      const dstRows = walletToEdges.get(dst) ?? [];
       dstRows.push(edge);
-      walletToEdges.set(edge.dst, dstRows);
+      walletToEdges.set(dst, dstRows);
     }
   }
+
   for (const [wallet, rows] of walletToEdges) {
     walletToEdges.set(
       wallet,
       rows.sort((a, b) => b.valueEth - a.valueEth),
     );
   }
+
   return walletToEdges;
 }
 
-function normalizeFlowRows(rows: FlowRowRaw[] | undefined): FlowPoint[] {
-  const out: FlowPoint[] = [];
-  for (const row of rows ?? []) {
-    const ts = toTimestampMs(row.bucket_ts);
-    if (ts === null) {
-      continue;
-    }
-    out.push({
-      ts,
-      inflow: toNumber(row.exchange_inflow_eth),
-      outflow: toNumber(row.exchange_outflow_eth),
-      net: toNumber(row.net_flow_eth),
-    });
+const pickNodeLabel = (node: string, type: "tier" | "exchange", tier: string, cex: string) => {
+  if (type === "tier") {
+    return tier || node;
   }
-  return out.sort((a, b) => a.ts - b.ts);
-}
-
-function normalizeCexRows(rows: CexRowRaw[] | undefined): CexFlowPoint[] {
-  const out: CexFlowPoint[] = [];
-  for (const row of rows ?? []) {
-    const ts = toTimestampMs(row.bucket_ts);
-    const cex = typeof row.cex_name === "string" ? row.cex_name.trim() : "";
-    if (ts === null || cex.length === 0) {
-      continue;
-    }
-    out.push({
-      ts,
-      cex,
-      inflow: toNumber(row.inflow_eth),
-      outflow: toNumber(row.outflow_eth),
-      net: toNumber(row.net_flow_eth),
-    });
-  }
-  return out.sort((a, b) => a.ts - b.ts);
-}
-
-function normalizeEdgeRows(rows: EdgeRowRaw[] | undefined): EdgePoint[] {
-  const out: EdgePoint[] = [];
-  for (const row of rows ?? []) {
-    const src = typeof row.src === "string" ? row.src : "";
-    const dst = typeof row.dst === "string" ? row.dst : "";
-    if (src.length === 0 || dst.length === 0) {
-      continue;
-    }
-    out.push({
-      src,
-      dst,
-      srcLabel: typeof row.src_label === "string" ? row.src_label : "unlabeled",
-      dstLabel: typeof row.dst_label === "string" ? row.dst_label : "unlabeled",
-      valueEth: toNumber(row.total_value_eth),
-      txCount: Math.max(0, Math.round(toNumber(row.tx_count))),
-    });
-  }
-  return out.sort((a, b) => b.valueEth - a.valueEth);
-}
-
-function findDatasetPath(manifest: DatasetsManifest, datasetId: string, fallback: string) {
-  const found = (manifest.datasets ?? []).find((dataset) => dataset.id === datasetId)?.file;
-  return typeof found === "string" && found.length > 0 ? found : fallback;
-}
+  return cex || node;
+};
 
 export async function loadExchangeAnalyticsData(): Promise<ExchangeAnalyticsData> {
-  if (cachePromise) {
-    return cachePromise;
+  if (compatibilityPromise) {
+    return compatibilityPromise;
   }
 
-  cachePromise = (async () => {
-    const manifest = await fetchJson<DatasetsManifest>(withBaseUrl("data/datasets.json"));
-    const flowPath = findDatasetPath(
-      manifest,
-      DATASET_IDS.flow,
-      "/data/exchange_flow_7d_hourly.json",
-    );
-    const byCexPath = findDatasetPath(
-      manifest,
-      DATASET_IDS.byCex,
-      "/data/exchange_netflow_by_cex_7d_hourly.json",
-    );
-    const edgesPath = findDatasetPath(
-      manifest,
-      DATASET_IDS.edges,
-      "/data/exchange_network_edges_24h.json",
-    );
+  compatibilityPromise = Promise.all([
+    loadExchangeFlowHourly(),
+    loadTierExchangeFlowHourly(),
+    loadTierExchangeEdges24h(),
+  ]).then(([exchangeFlow, tierFlow, tierEdges]) => {
+    const flowSeries = exchangeFlow.map((point) => ({
+      ts: point.bucket_ts.getTime(),
+      inflow: point.exchange_inflow_eth,
+      outflow: point.exchange_outflow_eth,
+      net: point.net_flow_eth,
+    }));
 
-    const [flowRaw, byCexRaw, edgesRaw] = await Promise.all([
-      fetchJson<DuneEnvelope<FlowRowRaw>>(withBaseUrl(flowPath)),
-      fetchJson<DuneEnvelope<CexRowRaw>>(withBaseUrl(byCexPath)),
-      fetchJson<DuneEnvelope<EdgeRowRaw>>(withBaseUrl(edgesPath)),
-    ]);
+    const byCexSeries = tierFlow.map((point) => ({
+      ts: point.bucket_ts.getTime(),
+      cex: point.tier,
+      inflow: point.tier_exchange_inflow_eth,
+      outflow: point.tier_exchange_outflow_eth,
+      net: point.tier_exchange_net_flow_eth,
+    }));
 
-    const flowSeries = normalizeFlowRows(flowRaw.result?.rows);
-    const byCexSeries = normalizeCexRows(byCexRaw.result?.rows);
-    const edges24h = normalizeEdgeRows(edgesRaw.result?.rows);
+    const edges24h = tierEdges.map((edge) => ({
+      src: edge.src_node,
+      dst: edge.dst_node,
+      srcLabel:
+        pickNodeLabel(edge.src_node, edge.src_type, edge.tier, edge.cex_name) || "unlabeled",
+      dstLabel:
+        pickNodeLabel(edge.dst_node, edge.dst_type, edge.tier, edge.cex_name) || "unlabeled",
+      valueEth: edge.total_value_eth,
+      txCount: edge.tx_count,
+    }));
 
-    const executionTimes = [
-      flowRaw.execution_ended_at,
-      byCexRaw.execution_ended_at,
-      edgesRaw.execution_ended_at,
-    ]
-      .map((value) => toTimestampMs(value))
-      .filter((value): value is number => value !== null);
+    const allTs = [
+      ...exchangeFlow.map((point) => point.bucket_ts.getTime()),
+      ...tierFlow.map((point) => point.bucket_ts.getTime()),
+    ].filter((ts) => Number.isFinite(ts));
 
-    const asOf = executionTimes.length > 0 ? Math.max(...executionTimes) : null;
+    const asOf = allTs.length > 0 ? Math.max(...allTs) : null;
 
     return {
       flowSeries,
@@ -273,22 +265,13 @@ export async function loadExchangeAnalyticsData(): Promise<ExchangeAnalyticsData
       cexToPoints: indexCexPoints(byCexSeries),
       walletToEdges: indexWalletEdges(edges24h),
     };
-  })();
+  });
 
-  return cachePromise;
+  return compatibilityPromise;
 }
-
-export const selectFlowWindow = (
-  data: ExchangeAnalyticsData,
-  rangeMs: number,
-  nowMs = Date.now(),
-) => {
-  const start = nowMs - rangeMs;
-  return data.flowSeries.filter((point) => point.ts >= start);
-};
 
 export const selectTopEdges = (data: ExchangeAnalyticsData, limit: number) =>
   data.edges24h.slice(0, Math.max(0, limit));
 
 export const selectWalletEdges = (data: ExchangeAnalyticsData, wallet: string) =>
-  data.walletToEdges.get(wallet) ?? [];
+  data.walletToEdges.get(normalizeNode(wallet)) ?? [];

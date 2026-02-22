@@ -18,17 +18,41 @@ interface CexFlowsChartProps {
   series: ImpactCexSeries[];
 }
 
-const CEX_COLORS = ["#5B8CFF", "#10B981", "#F59E0B", "#EF4444", "#A78BFA"];
+const tierMeta: Record<string, { color: string; threshold: string }> = {
+  whale: { color: "#F43F5E", threshold: ">= 10000 ETH" },
+  shark: { color: "#F59E0B", threshold: "< 10000 ETH" },
+  dolphin: { color: "#10B981", threshold: "< 1000 ETH" },
+  shrimp: { color: "#3B82F6", threshold: "< 100 ETH" },
+};
+
+const tierKey = (label: string) => label.trim().toLowerCase();
+const tierColor = (label: string) => tierMeta[tierKey(label)]?.color ?? "#A78BFA";
+const tierThreshold = (label: string) => tierMeta[tierKey(label)]?.threshold ?? "";
 
 export function CexFlowsChart({ series }: CexFlowsChartProps) {
   const [wrapRef, wrapSize] = useElementSize<HTMLDivElement>();
   const [hoverTs, setHoverTs] = useState<number | null>(null);
+  const rankedSeries = useMemo(
+    () =>
+      [...series].sort((a, b) => {
+        const aKey = tierKey(a.cex);
+        const bKey = tierKey(b.cex);
+        if ((aKey === "shark" && bKey === "whale") || (aKey === "whale" && bKey === "shark")) {
+          return aKey === "shark" ? -1 : 1;
+        }
+        return (
+          b.points.reduce((sum, point) => sum + Math.abs(point.net), 0) -
+          a.points.reduce((sum, point) => sum + Math.abs(point.net), 0)
+        );
+      }),
+    [series],
+  );
 
-  const flat = series.flatMap((entry) => entry.points);
+  const flat = rankedSeries.flatMap((entry) => entry.points);
   const W = Math.max(320, wrapSize.width || FALLBACK_W);
   const H = Math.max(220, wrapSize.height || FALLBACK_H);
-  const minTs = flat[0]?.ts ?? Date.now() - 1;
-  const maxTs = flat.at(-1)?.ts ?? Date.now();
+  const minTs = d3.min(flat, (point) => point.ts) ?? Date.now() - 1;
+  const maxTs = d3.max(flat, (point) => point.ts) ?? Date.now();
   const maxAbs = Math.max(1, d3.max(flat, (point) => Math.abs(point.net)) ?? 1);
 
   const x = useMemo(
@@ -52,25 +76,32 @@ export function CexFlowsChart({ series }: CexFlowsChartProps) {
 
   return (
     <Card className="bg-card/60 border-border/60 h-[380px] rounded-xl flex flex-col overflow-hidden">
-      <CardHeader className="flex-row items-center justify-between space-y-0 pb-3 border-b border-border/50 gap-3">
-        <CardTitle className="truncate">Net Flow by Exchange (Top 5 CEX)</CardTitle>
+      <CardHeader className="flex-row items-center justify-between space-y-0 !pt-4 !pb-2 border-b border-border/50 gap-3">
+        <CardTitle className="truncate leading-tight">Net Flow by Tier</CardTitle>
       </CardHeader>
       <CardContent className="p-0 flex-1 min-h-0">
         <div className="h-full px-4 pb-4 flex flex-col min-h-0">
           <div
             className="pb-1 px-2 grid items-center gap-x-8 text-[11px] text-muted-foreground shrink-0"
-            style={{ gridTemplateColumns: `repeat(${Math.max(1, series.length)}, minmax(0, 1fr))` }}
+            style={{
+              gridTemplateColumns: `repeat(${Math.max(1, rankedSeries.length)}, minmax(0, 1fr))`,
+            }}
           >
-            {series.map((entry, idx) => (
+            {rankedSeries.map((entry) => (
               <div
                 key={entry.cex}
-                className="inline-flex items-center justify-center gap-2 min-w-0"
+                className="inline-flex flex-col items-center justify-center gap-0.5 min-w-0"
               >
-                <span
-                  className="inline-block h-2 w-2 rounded-full"
-                  style={{ backgroundColor: CEX_COLORS[idx % CEX_COLORS.length] }}
-                />
-                <span className="truncate">{entry.cex}</span>
+                <span className="inline-flex items-center gap-2 min-w-0">
+                  <span
+                    className="inline-block h-2 w-2 rounded-full"
+                    style={{ backgroundColor: tierColor(entry.cex) }}
+                  />
+                  <span className="truncate">{entry.cex}</span>
+                </span>
+                <span className="text-[10px] text-muted-foreground/90">
+                  {tierThreshold(entry.cex)}
+                </span>
               </div>
             ))}
           </div>
@@ -128,7 +159,7 @@ export function CexFlowsChart({ series }: CexFlowsChartProps) {
                 opacity="0.42"
               />
 
-              {series.map((entry, idx) => {
+              {rankedSeries.map((entry) => {
                 const path =
                   d3
                     .line<(typeof entry.points)[number]>()
@@ -140,7 +171,7 @@ export function CexFlowsChart({ series }: CexFlowsChartProps) {
                     key={entry.cex}
                     d={path}
                     fill="none"
-                    stroke={CEX_COLORS[idx % CEX_COLORS.length]}
+                    stroke={tierColor(entry.cex)}
                     strokeWidth="2"
                     opacity="0.95"
                   />

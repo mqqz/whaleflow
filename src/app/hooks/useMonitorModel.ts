@@ -1,7 +1,8 @@
 import { useMemo, useState } from "react";
-import { useExchangeAnalytics } from "./useExchangeAnalytics";
-import { EdgePoint, FlowPoint, selectTopEdges } from "../services/analyticsData";
+import { useAnalyticsData } from "./useAnalyticsData";
+import { formatAsOf, selectTopEdges } from "../services/analyticsSelectors";
 import { LiveTransaction } from "./useLiveTransactions";
+import type { EdgePoint, FlowPoint } from "../services/analyticsData";
 
 export type MonitorFeedMode = "live" | "top24h";
 
@@ -45,25 +46,18 @@ interface UseMonitorModelResult {
   top24hAvailable: boolean;
 }
 
-const formatAsOf = (ts: number | null) =>
-  ts === null
-    ? "unknown"
-    : new Date(ts).toLocaleString([], {
-        month: "short",
-        day: "2-digit",
-        hour: "2-digit",
-        minute: "2-digit",
-      });
+const LIVE_BUCKET_MS = 5 * 60 * 1000;
+
+const normalizeNode = (value: string) => value.replace(/^tier:/, "").replace(/^cex:/, "");
 
 export function useMonitorModel({
   token,
   liveTransactions,
   maxVisible,
 }: UseMonitorModelOptions): UseMonitorModelResult {
-  const { data, loading, error } = useExchangeAnalytics();
+  const { exchangeFlow, tierEdges, loading, error } = useAnalyticsData();
   const [feedMode, setFeedMode] = useState<MonitorFeedMode>("live");
   const isEth = token.toLowerCase() === "eth";
-  const LIVE_BUCKET_MS = 5 * 60 * 1000;
 
   const liveFlowSeries = useMemo<FlowPoint[]>(() => {
     if (!isEth) {
@@ -78,6 +72,11 @@ export function useMonitorModel({
       if (!Number.isFinite(amount) || amount <= 0) {
         continue;
       }
+      const fromIsExchange = Boolean(tx.fromLabel);
+      const toIsExchange = Boolean(tx.toLabel);
+      if (fromIsExchange === toIsExchange) {
+        continue;
+      }
       const bucketTs = Math.floor(tx.timestampMs / LIVE_BUCKET_MS) * LIVE_BUCKET_MS;
       const current = byBucket.get(bucketTs) ?? {
         ts: bucketTs,
@@ -85,7 +84,7 @@ export function useMonitorModel({
         outflow: 0,
         net: 0,
       };
-      if (tx.type === "inflow") {
+      if (toIsExchange) {
         current.inflow += amount;
       } else {
         current.outflow += amount;
@@ -94,7 +93,16 @@ export function useMonitorModel({
       byBucket.set(bucketTs, current);
     }
     return [...byBucket.values()].sort((a, b) => a.ts - b.ts);
-  }, [isEth, liveTransactions, LIVE_BUCKET_MS]);
+  }, [isEth, liveTransactions]);
+
+  const top24hFlowSeries = useMemo<FlowPoint[]>(() => {
+    return exchangeFlow.map((point) => ({
+      ts: point.bucket_ts.getTime(),
+      inflow: point.exchange_inflow_eth,
+      outflow: point.exchange_outflow_eth,
+      net: point.net_flow_eth,
+    }));
+  }, [exchangeFlow]);
 
   const flowSeries = useMemo(() => {
     if (!isEth) {
@@ -103,28 +111,40 @@ export function useMonitorModel({
     if (feedMode === "live") {
       return liveFlowSeries;
     }
-    return data?.flowSeries ?? [];
-  }, [data, feedMode, isEth, liveFlowSeries]);
+    return top24hFlowSeries;
+  }, [feedMode, isEth, liveFlowSeries, top24hFlowSeries]);
 
-  const asOfLabel = useMemo(() => formatAsOf(data?.asOf ?? null), [data?.asOf]);
+  const asOfLabel = useMemo(() => formatAsOf(), []);
+
+  const edgePoints24h = useMemo<EdgePoint[]>(() => {
+    return tierEdges.map((edge) => {
+      const srcLabel = edge.src_type === "exchange" ? edge.cex_name || "exchange" : edge.tier;
+      const dstLabel = edge.dst_type === "exchange" ? edge.cex_name || "exchange" : edge.tier;
+      return {
+        src: normalizeNode(edge.src_node),
+        dst: normalizeNode(edge.dst_node),
+        srcLabel: srcLabel || "unlabeled",
+        dstLabel: dstLabel || "unlabeled",
+        valueEth: edge.total_value_eth,
+        txCount: edge.tx_count,
+      };
+    });
+  }, [tierEdges]);
 
   const edgeRows = useMemo<MonitorEdgeFeedRow[]>(() => {
-    if (!data) {
-      return [];
-    }
-    return selectTopEdges(data, maxVisible).map((edge, idx) => ({
-      id: `${edge.src}:${edge.dst}:${idx}`,
+    return selectTopEdges(tierEdges, maxVisible).map((edge, idx) => ({
+      id: `${edge.src_node}:${edge.dst_node}:${idx}`,
       timeLabel: asOfLabel,
-      src: edge.src,
-      dst: edge.dst,
-      srcLabel: edge.srcLabel,
-      dstLabel: edge.dstLabel,
-      valueEth: edge.valueEth,
-      txCount: edge.txCount,
+      src: normalizeNode(edge.src_node),
+      dst: normalizeNode(edge.dst_node),
+      srcLabel:
+        (edge.src_type === "exchange" ? edge.cex_name || "exchange" : edge.tier) || "unlabeled",
+      dstLabel:
+        (edge.dst_type === "exchange" ? edge.cex_name || "exchange" : edge.tier) || "unlabeled",
+      valueEth: edge.total_value_eth,
+      txCount: edge.tx_count,
     }));
-  }, [asOfLabel, data, maxVisible]);
-
-  const edgePoints24h = useMemo(() => data?.edges24h ?? [], [data?.edges24h]);
+  }, [asOfLabel, maxVisible, tierEdges]);
 
   const feedTitle = feedMode === "live" ? "Live Transactions" : "Top Exchange Transfers (24H)";
   const feedSubtitle =

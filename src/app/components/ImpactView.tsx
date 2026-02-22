@@ -1,4 +1,3 @@
-import { LiveTransaction } from "../hooks/useLiveTransactions";
 import { useImpactModel } from "../hooks/useImpactModel";
 import { KpiRow } from "./impact/KpiRow";
 import { FlowPriceChart } from "./impact/FlowPriceChart";
@@ -8,7 +7,6 @@ import { InsightCard } from "./InsightCard";
 
 interface ImpactPageProps {
   token: string;
-  transactions: LiveTransaction[];
 }
 
 const formatValue = (value: number | null, digits = 2) => {
@@ -24,54 +22,62 @@ const formatValue = (value: number | null, digits = 2) => {
   return value.toFixed(digits);
 };
 
-export function ImpactPage({ token, transactions }: ImpactPageProps) {
-  const model = useImpactModel({ token, transactions });
+export function ImpactPage({ token }: ImpactPageProps) {
+  const model = useImpactModel({ token });
 
   const kpiCards = [
     {
       title: "Net Exchange Flow (1H)",
       value:
-        model.kpis.netFlow1h.value === null
+        model.kpis.netExchangeFlow1h.value === null
           ? "n/a"
-          : `${model.kpis.netFlow1h.value >= 0 ? "+" : "-"}${formatValue(Math.abs(model.kpis.netFlow1h.value), 1)}`,
+          : `${model.kpis.netExchangeFlow1h.value >= 0 ? "+" : "-"}${formatValue(Math.abs(model.kpis.netExchangeFlow1h.value), 1)}`,
       valueClassName:
-        model.kpis.netFlow1h.value === null
+        model.kpis.netExchangeFlow1h.value === null
           ? ""
-          : model.kpis.netFlow1h.value >= 0
+          : model.kpis.netExchangeFlow1h.value >= 0
             ? "text-success"
             : "text-destructive",
-      deltaPct: model.kpis.netFlow1h.pct,
+      deltaPct: model.kpis.netExchangeFlow1h.pct,
     },
     {
-      title: `Whale Volume (${model.range.toUpperCase()})`,
-      value: `${formatValue(model.kpis.whaleVolumeRange.value, 1)} ETH`,
-      deltaPct: model.kpis.whaleVolumeRange.pct,
-      subtitle: `Threshold >= ${model.whaleThresholdEth} ETH`,
+      title: "Whale↔Exchange Net Flow (1H)",
+      value:
+        model.kpis.whaleExchangeNetFlow1h.value === null
+          ? "n/a"
+          : `${model.kpis.whaleExchangeNetFlow1h.value >= 0 ? "+" : "-"}${formatValue(Math.abs(model.kpis.whaleExchangeNetFlow1h.value), 1)} ETH`,
+      deltaPct: model.kpis.whaleExchangeNetFlow1h.pct,
+    },
+    {
+      title: "Whale Share",
+      value:
+        model.kpis.whaleShare.value === null
+          ? "n/a"
+          : `${(model.kpis.whaleShare.value * 100).toFixed(1)}%`,
+      deltaPct: model.kpis.whaleShare.pct,
+      subtitle: "abs(whale net) / abs(total net)",
     },
     {
       title: "Rolling Volatility (24H)",
-      value: `${formatValue(model.kpis.rollingVol24h.value, 2)}%`,
-      deltaPct: model.kpis.rollingVol24h.pct,
+      value:
+        model.kpis.rollingVolatility24h.value === null
+          ? "n/a"
+          : `${formatValue(model.kpis.rollingVolatility24h.value, 2)}%`,
+      deltaPct: model.kpis.rollingVolatility24h.pct,
     },
     {
       title: "Flow-Return Correlation (24H)",
       value: formatValue(model.kpis.flowReturnCorr24h.value, 3),
       deltaPct: model.kpis.flowReturnCorr24h.pct,
     },
-    {
-      title: "Flow Z-Score",
-      value: formatValue(model.kpis.flowZScore.value, 2),
-      deltaPct: model.kpis.flowZScore.pct,
-      subtitle: "z = (x - mu) / sigma",
-    },
   ];
 
-  const netFlowValue = model.kpis.netFlow1h.value;
-  const netFlowPct = model.kpis.netFlow1h.pct;
+  const netFlowValue = model.kpis.netExchangeFlow1h.value;
+  const netFlowPct = model.kpis.netExchangeFlow1h.pct;
   const impactInsight = {
     signal: model.insight.summary,
     narrative: model.insight.detail,
-    hasStats: netFlowValue !== null && netFlowPct !== null,
+    hasStats: false,
     netFlow: netFlowValue === null ? "n/a" : netFlowValue.toFixed(1),
     deltaPct: netFlowPct === null ? "n/a" : `${Math.abs(netFlowPct).toFixed(1)}%`,
     symbol:
@@ -88,7 +94,7 @@ export function ImpactPage({ token, transactions }: ImpactPageProps) {
     <div className="mt-16 px-3 pb-3 pt-3 space-y-3">
       <KpiRow cards={kpiCards} />
 
-      <InsightCard insight={impactInsight} statsLabel="Last 1h" />
+      <InsightCard insight={impactInsight} statsLabel="Last 1h" suppressStatsFallback />
 
       <FlowPriceChart
         points={model.flowPriceSeries}

@@ -43,6 +43,25 @@ const isRoleLabel = (value: string) =>
   value.includes("Buyer") ||
   value.includes("Seller");
 
+const TIER_LABELS = new Set(["shrimp", "dolphin", "shark", "whale"]);
+const TIER_PLURAL: Record<string, string> = {
+  shrimp: "shrimps",
+  dolphin: "dolphins",
+  shark: "sharks",
+  whale: "whales",
+};
+
+const parseTierLabel = (value: string): "shrimp" | "dolphin" | "shark" | "whale" | null => {
+  const normalized = value
+    .trim()
+    .toLowerCase()
+    .replace(/^tier:/, "");
+  if (TIER_LABELS.has(normalized)) {
+    return normalized as "shrimp" | "dolphin" | "shark" | "whale";
+  }
+  return null;
+};
+
 const classifyNodeType = (id: string, amount: number): GraphNode["type"] => {
   const lower = id.toLowerCase();
 
@@ -174,10 +193,22 @@ const buildGraphDataFromEdges = (edges: EdgePoint[]) => {
     const sourceLabel = (edge.srcLabel ?? "").toLowerCase();
     const targetLabel = (edge.dstLabel ?? "").toLowerCase();
 
-    const sourceType: GraphNode["type"] =
-      sourceLabel && sourceLabel !== "unlabeled" ? "exchange" : classifyNodeType(sourceId, amount);
-    const targetType: GraphNode["type"] =
-      targetLabel && targetLabel !== "unlabeled" ? "exchange" : classifyNodeType(targetId, amount);
+    const sourceTier = parseTierLabel(sourceLabel) ?? parseTierLabel(sourceId);
+    const targetTier = parseTierLabel(targetLabel) ?? parseTierLabel(targetId);
+    const sourceType: GraphNode["type"] = sourceTier
+      ? sourceTier === "whale"
+        ? "whale"
+        : "wallet"
+      : sourceLabel && sourceLabel !== "unlabeled"
+        ? "exchange"
+        : classifyNodeType(sourceId, amount);
+    const targetType: GraphNode["type"] = targetTier
+      ? targetTier === "whale"
+        ? "whale"
+        : "wallet"
+      : targetLabel && targetLabel !== "unlabeled"
+        ? "exchange"
+        : classifyNodeType(targetId, amount);
 
     if (!nodes.has(sourceId)) {
       nodes.set(sourceId, {
@@ -260,6 +291,14 @@ const linkKey = (d: GraphLink) => {
   const source = typeof d.source === "string" ? d.source : d.source.id;
   const target = typeof d.target === "string" ? d.target : d.target.id;
   return `${source}=>${target}`;
+};
+
+const formatNodeLabel = (value: string) => {
+  const tier = parseTierLabel(value);
+  if (tier) {
+    return TIER_PLURAL[tier] ?? value;
+  }
+  return value;
 };
 
 export function NetworkGraph({
@@ -594,7 +633,7 @@ export function NetworkGraph({
 
     node
       .select("text")
-      .text((d) => d.id)
+      .text((d) => formatNodeLabel(d.id))
       .attr("dy", (d) => Math.sqrt(d.value) / 2 + 20);
 
     node.on("mouseenter", function (_event, d) {
@@ -706,7 +745,7 @@ export function NetworkGraph({
 
   return (
     <div className="relative h-full w-full bg-card/30 backdrop-blur-sm rounded-xl border border-border/50 overflow-hidden group">
-      <div className="absolute bottom-4 left-4 p-2.5 bg-card/90 backdrop-blur-sm rounded-lg border border-border/50 z-10">
+      <div className="absolute bottom-4 right-4 p-2.5 bg-transparent rounded-lg border-0 z-10">
         <div className="space-y-1.5 text-xs">
           <div className="flex items-center gap-2">
             <div className="w-2.5 h-2.5 rounded-full bg-[#F43F5E]" />
@@ -717,10 +756,6 @@ export function NetworkGraph({
             <span>Exchange</span>
           </div>
           <div className="flex items-center gap-2">
-            <div className="w-2.5 h-2.5 rounded-full bg-[#8B5CF6]" />
-            <span>Contract</span>
-          </div>
-          <div className="flex items-center gap-2">
             <div className="w-2.5 h-2.5 rounded-full bg-[#3B82F6]" />
             <span>Wallet</span>
           </div>
@@ -729,7 +764,7 @@ export function NetworkGraph({
 
       {hoveredNode ? (
         <div className="absolute bottom-4 left-4 px-2 py-1 text-xs rounded border border-border/50 bg-card/85 text-muted-foreground z-10 font-mono">
-          {hoveredNode}
+          {formatNodeLabel(hoveredNode)}
         </div>
       ) : null}
 

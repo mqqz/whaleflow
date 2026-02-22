@@ -85,6 +85,41 @@ const shortEventId = (id: string) => {
   return `${id.slice(0, 10)}...${id.slice(-6)}`;
 };
 const WHALE_THRESHOLD = 100;
+const TIER_EMOJI: Record<string, string> = {
+  shrimp: "🦐",
+  dolphin: "🐬",
+  shark: "🦈",
+  whale: "🐋",
+};
+const TIER_PLURAL: Record<string, string> = {
+  shrimp: "shrimps",
+  dolphin: "dolphins",
+  shark: "sharks",
+  whale: "whales",
+};
+
+const getTierName = (value: string, label: string) => {
+  const normalizedValue = value.trim().toLowerCase();
+  const normalizedLabel = label.trim().toLowerCase();
+  if (TIER_EMOJI[normalizedValue]) {
+    return normalizedValue;
+  }
+  if (TIER_EMOJI[normalizedLabel]) {
+    return normalizedLabel;
+  }
+  return null;
+};
+
+const withTierEmoji = (value: string, label: string) => {
+  const tier = getTierName(value, label);
+  if (!tier) {
+    return value;
+  }
+  return `${TIER_PLURAL[tier] ?? value} ${TIER_EMOJI[tier]}`;
+};
+
+const isCexLabel = (value: string, label: string) =>
+  label !== "unlabeled" && !getTierName(value, label);
 
 export function TransactionFeed({
   network,
@@ -238,26 +273,25 @@ export function TransactionFeed({
                             <div className="flex-1 flex items-center gap-2">
                               <div className="flex-1">
                                 <p className="text-xs text-muted-foreground mb-0.5">From</p>
-                                <button
-                                  type="button"
-                                  onClick={() => onWalletSelect(row.src)}
-                                  className={`text-xs font-mono rounded px-1 -mx-1 transition-colors ${
-                                    row.srcLabel !== "unlabeled"
-                                      ? selectedWallet === row.src
-                                        ? "text-amber-300 bg-amber-500/15"
-                                        : "text-amber-400 hover:text-amber-300 hover:bg-amber-500/10"
-                                      : selectedWallet === row.src
-                                        ? "text-primary bg-primary/15"
-                                        : "hover:text-primary hover:bg-primary/10"
-                                  }`}
-                                >
-                                  {shortAddress(row.src)}
-                                </button>
-                                {row.srcLabel !== "unlabeled" ? (
-                                  <span className="ml-1 inline-flex items-center rounded border border-amber-500/30 bg-amber-500/12 px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide text-amber-300">
-                                    {row.srcLabel}
-                                  </span>
-                                ) : null}
+                                {(() => {
+                                  const base = withTierEmoji(shortAddress(row.src), row.srcLabel);
+                                  const cex = isCexLabel(row.src, row.srcLabel);
+                                  const hideBase = cex;
+                                  return (
+                                    <>
+                                      {hideBase ? null : (
+                                        <span className="text-xs font-mono text-foreground">
+                                          {base}
+                                        </span>
+                                      )}
+                                      {cex ? (
+                                        <span className="ml-1 text-xs font-medium uppercase tracking-wide text-amber-400">
+                                          {row.srcLabel}
+                                        </span>
+                                      ) : null}
+                                    </>
+                                  );
+                                })()}
                                 {isWhale && row.srcLabel === "unlabeled" ? (
                                   <span
                                     className="ml-1 inline-flex items-center rounded border border-rose-500/30 bg-rose-500/12 px-1 py-0.5 text-[10px] font-medium text-rose-300"
@@ -270,26 +304,25 @@ export function TransactionFeed({
                               <ArrowRight className="w-3.5 h-3.5 text-muted-foreground flex-shrink-0" />
                               <div className="flex-1">
                                 <p className="text-xs text-muted-foreground mb-0.5">To</p>
-                                <button
-                                  type="button"
-                                  onClick={() => onWalletSelect(row.dst)}
-                                  className={`text-xs font-mono rounded px-1 -mx-1 transition-colors ${
-                                    row.dstLabel !== "unlabeled"
-                                      ? selectedWallet === row.dst
-                                        ? "text-amber-300 bg-amber-500/15"
-                                        : "text-amber-400 hover:text-amber-300 hover:bg-amber-500/10"
-                                      : selectedWallet === row.dst
-                                        ? "text-primary bg-primary/15"
-                                        : "hover:text-primary hover:bg-primary/10"
-                                  }`}
-                                >
-                                  {shortAddress(row.dst)}
-                                </button>
-                                {row.dstLabel !== "unlabeled" ? (
-                                  <span className="ml-1 inline-flex items-center rounded border border-amber-500/30 bg-amber-500/12 px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide text-amber-300">
-                                    {row.dstLabel}
-                                  </span>
-                                ) : null}
+                                {(() => {
+                                  const base = withTierEmoji(shortAddress(row.dst), row.dstLabel);
+                                  const cex = isCexLabel(row.dst, row.dstLabel);
+                                  const hideBase = cex;
+                                  return (
+                                    <>
+                                      {hideBase ? null : (
+                                        <span className="text-xs font-mono text-foreground">
+                                          {base}
+                                        </span>
+                                      )}
+                                      {cex ? (
+                                        <span className="ml-1 text-xs font-medium uppercase tracking-wide text-amber-400">
+                                          {row.dstLabel}
+                                        </span>
+                                      ) : null}
+                                    </>
+                                  );
+                                })()}
                                 {isWhale && row.dstLabel === "unlabeled" ? (
                                   <span
                                     className="ml-1 inline-flex items-center rounded border border-rose-500/30 bg-rose-500/12 px-1 py-0.5 text-[10px] font-medium text-rose-300"
@@ -369,8 +402,6 @@ export function TransactionFeed({
                   >
                     {/** Live rows use per-transaction amount as the whale heuristic. */}
                     {(() => {
-                      const txAmount = Number.parseFloat(tx.amount);
-                      const isWhale = Number.isFinite(txAmount) && txAmount >= WHALE_THRESHOLD;
                       return (
                         <div className="flex items-start gap-4 p-3 bg-secondary/20 hover:bg-secondary/40 rounded-lg border border-border/20 transition-all group cursor-pointer">
                           <div className="w-[140px]">
@@ -403,44 +434,34 @@ export function TransactionFeed({
                                   {tx.fromLabel}
                                 </span>
                               ) : null}
-                              {isWhale && !tx.fromLabel ? (
-                                <span
-                                  className="ml-1 inline-flex items-center rounded border border-rose-500/30 bg-rose-500/12 px-1 py-0.5 text-[10px] font-medium text-rose-300"
-                                  title="Whale-sized transfer"
-                                >
-                                  <Icon iconNode={whale} className="h-3 w-3" />
-                                </span>
-                              ) : null}
                             </div>
                             <ArrowRight className="w-3.5 h-3.5 text-muted-foreground flex-shrink-0" />
                             <div className="flex-1">
                               <p className="text-xs text-muted-foreground mb-0.5">To</p>
-                              <button
-                                type="button"
-                                onClick={() => onWalletSelect(tx.to)}
-                                className={`text-xs font-mono rounded px-1 -mx-1 transition-colors ${
-                                  tx.toLabel
-                                    ? selectedWallet === tx.to
-                                      ? "text-amber-300 bg-amber-500/15"
-                                      : "text-amber-400 hover:text-amber-300 hover:bg-amber-500/10"
-                                    : selectedWallet === tx.to
-                                      ? "text-primary bg-primary/15"
-                                      : "hover:text-primary hover:bg-primary/10"
-                                }`}
-                              >
-                                {tx.to}
-                              </button>
+                              {tx.to === "contract creation" ? (
+                                <span className="text-xs font-mono text-muted-foreground">
+                                  {tx.to}
+                                </span>
+                              ) : (
+                                <button
+                                  type="button"
+                                  onClick={() => onWalletSelect(tx.to)}
+                                  className={`text-xs font-mono rounded px-1 -mx-1 transition-colors ${
+                                    tx.toLabel
+                                      ? selectedWallet === tx.to
+                                        ? "text-amber-300 bg-amber-500/15"
+                                        : "text-amber-400 hover:text-amber-300 hover:bg-amber-500/10"
+                                      : selectedWallet === tx.to
+                                        ? "text-primary bg-primary/15"
+                                        : "hover:text-primary hover:bg-primary/10"
+                                  }`}
+                                >
+                                  {tx.to}
+                                </button>
+                              )}
                               {tx.toLabel ? (
                                 <span className="ml-1 inline-flex items-center rounded border border-amber-500/30 bg-amber-500/12 px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide text-amber-300">
                                   {tx.toLabel}
-                                </span>
-                              ) : null}
-                              {isWhale && !tx.toLabel ? (
-                                <span
-                                  className="ml-1 inline-flex items-center rounded border border-rose-500/30 bg-rose-500/12 px-1 py-0.5 text-[10px] font-medium text-rose-300"
-                                  title="Whale-sized transfer"
-                                >
-                                  <Icon iconNode={whale} className="h-3 w-3" />
                                 </span>
                               ) : null}
                             </div>
@@ -448,14 +469,27 @@ export function TransactionFeed({
 
                           <div className="w-[120px] text-right">
                             <p className="text-xs text-muted-foreground mb-0.5">Amount</p>
-                            <p
-                              className={`text-sm font-bold ${
-                                tx.type === "inflow" ? "text-success" : "text-destructive"
-                              }`}
-                            >
-                              {tx.type === "inflow" ? "+" : "-"}
-                              {tx.amount} {tokenLabel}
-                            </p>
+                            {(() => {
+                              const nonContributingFlow =
+                                (!tx.fromLabel && !tx.toLabel) ||
+                                (Boolean(tx.fromLabel) && Boolean(tx.toLabel));
+                              const amountClass = nonContributingFlow
+                                ? "text-primary"
+                                : tx.type === "inflow"
+                                  ? "text-success"
+                                  : "text-destructive";
+                              const amountPrefix = nonContributingFlow
+                                ? ""
+                                : tx.type === "inflow"
+                                  ? "+"
+                                  : "-";
+                              return (
+                                <p className={`text-sm font-bold ${amountClass}`}>
+                                  {amountPrefix}
+                                  {tx.amount} {tokenLabel}
+                                </p>
+                              );
+                            })()}
                           </div>
 
                           <div className="w-[120px]">

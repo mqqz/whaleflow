@@ -55,8 +55,8 @@ export function CumulativeFlowChart({ points }: CumulativeFlowChartProps) {
 
   return (
     <Card className="bg-card/60 border-border/60 h-[380px] rounded-xl flex flex-col overflow-hidden">
-      <CardHeader className="flex-row items-center justify-between space-y-0 pb-3 border-b border-border/50 gap-3">
-        <CardTitle className="truncate">Cumulative Net Flow (Running Sum)</CardTitle>
+      <CardHeader className="flex-row items-center justify-between space-y-0 !pt-4 !pb-2 border-b border-border/50 gap-3">
+        <CardTitle className="truncate leading-tight">Cumulative Net Flow (Running Sum)</CardTitle>
       </CardHeader>
       <CardContent className="p-0 flex-1 min-h-0">
         <div ref={wrapRef} className="h-full px-4 pb-4">

@@ -116,6 +116,51 @@ const formatWei = (wei: bigint, fractionDigits: number): string => {
   return fractionRaw.length > 0 ? `${whole.toString()}.${fractionRaw}` : whole.toString();
 };
 
+interface CexLabelRecord {
+  cex_name?: string;
+  distinct_name?: string;
+}
+
+let cexLabelsPromise: Promise<Map<string, string>> | null = null;
+const APP_BASE_URL = import.meta.env.BASE_URL || "/";
+
+const withBaseUrl = (path: string) => {
+  const base = APP_BASE_URL.endsWith("/") ? APP_BASE_URL : `${APP_BASE_URL}/`;
+  const normalized = path.startsWith("/") ? path.slice(1) : path;
+  return `${base}${normalized}`;
+};
+
+const loadCexAddressLabels = async () => {
+  if (cexLabelsPromise) {
+    return cexLabelsPromise;
+  }
+
+  const labelsPath = withBaseUrl("data/cex_labels.json");
+  cexLabelsPromise = fetch(labelsPath, { cache: "no-store" })
+    .then((response) => {
+      if (!response.ok) {
+        throw new Error(`Failed to load ${labelsPath}: ${response.status}`);
+      }
+      return response.json() as Promise<Record<string, CexLabelRecord>>;
+    })
+    .then((rows) => {
+      const out = new Map<string, string>();
+      for (const [addressRaw, meta] of Object.entries(rows ?? {})) {
+        const address = addressRaw.trim().toLowerCase();
+        const cex = String(meta?.cex_name ?? "").trim();
+        if (!address || !cex) {
+          continue;
+        }
+        if (!out.has(address)) {
+          out.set(address, cex);
+        }
+      }
+      return out;
+    });
+
+  return cexLabelsPromise;
+};
+
 const mapBinanceTrade = (raw: unknown): LiveTransaction[] => {
   if (!raw || typeof raw !== "object") {
     return [];
@@ -369,19 +414,21 @@ const mapEvmTx = (
   const fromAddress = tx.from;
   const toAddress = tx.to ?? undefined;
   const fromShort = shortAddress(fromAddress);
-  const toShort = shortAddress(toAddress);
+  const toShort = toAddress ? shortAddress(toAddress) : "contract creation";
   const fromLabel =
     resolveExchangeLabel?.(fromAddress) ?? resolveExchangeLabel?.(fromShort) ?? null;
-  const toLabel =
-    resolveExchangeLabel?.(toAddress ?? "") ?? resolveExchangeLabel?.(toShort) ?? null;
+  const toLabel = toAddress
+    ? (resolveExchangeLabel?.(toAddress) ?? resolveExchangeLabel?.(toShort) ?? null)
+    : null;
   const fromIsExchange = fromLabel !== null;
   const toIsExchange = toLabel !== null;
 
-  // Keep only exchange-relative transfers for ETH flow semantics.
-  if (toIsExchange === fromIsExchange) {
-    return null;
-  }
-  const flowType: LiveTransaction["type"] = toIsExchange ? "inflow" : "outflow";
+  const flowType: LiveTransaction["type"] =
+    toIsExchange && !fromIsExchange
+      ? "inflow"
+      : fromIsExchange && !toIsExchange
+        ? "outflow"
+        : "inflow";
 
   return {
     id: tx.hash,
@@ -570,11 +617,12 @@ export function useLiveTransactions({
     exchangeLabelByAddressRef.current = new Map();
 
     if (network === "ethereum") {
-      void loadExchangeAnalyticsData()
-        .then((analytics) => {
+      void Promise.allSettled([loadCexAddressLabels(), loadExchangeAnalyticsData()]).then(
+        ([cexResult, analyticsResult]) => {
           if (disposed) {
             return;
           }
+
           const labelByAddress = new Map<string, string>();
           const putLabeledAddress = (address: string, label: string) => {
             const normalizedAddress = normalizeAddress(address);
@@ -586,21 +634,54 @@ export function useLiveTransactions({
             }
           };
 
-          for (const edge of analytics.edges24h) {
-            if (edge.srcLabel !== "unlabeled") {
-              putLabeledAddress(edge.src, edge.srcLabel);
-              putLabeledAddress(shortAddress(edge.src), edge.srcLabel);
-            }
-            if (edge.dstLabel !== "unlabeled") {
-              putLabeledAddress(edge.dst, edge.dstLabel);
-              putLabeledAddress(shortAddress(edge.dst), edge.dstLabel);
+          if (cexResult.status === "fulfilled") {
+            for (const [address, label] of cexResult.value) {
+              putLabeledAddress(address, label);
+              putLabeledAddress(shortAddress(address), label);
             }
           }
+
+          if (analyticsResult.status === "fulfilled") {
+            for (const edge of analyticsResult.value.edges24h) {
+              if (edge.srcLabel !== "unlabeled") {
+                putLabeledAddress(edge.src, edge.srcLabel);
+                putLabeledAddress(shortAddress(edge.src), edge.srcLabel);
+              }
+              if (edge.dstLabel !== "unlabeled") {
+                putLabeledAddress(edge.dst, edge.dstLabel);
+                putLabeledAddress(shortAddress(edge.dst), edge.dstLabel);
+              }
+            }
+          }
+
           exchangeLabelByAddressRef.current = labelByAddress;
-        })
-        .catch(() => {
-          // If analytics labels are unavailable we fall back to value-based side mapping.
-        });
+          const resolveFromLoadedMap = (address: string | undefined) =>
+            address ? (labelByAddress.get(normalizeAddress(address)) ?? null) : null;
+
+          queueRef.current = queueRef.current.map((tx) => {
+            const fromLabel = resolveFromLoadedMap(tx.fromFull ?? tx.from) ?? tx.fromLabel ?? null;
+            const toLabel = resolveFromLoadedMap(tx.toFull ?? tx.to) ?? tx.toLabel ?? null;
+            return {
+              ...tx,
+              fromLabel: fromLabel ?? undefined,
+              toLabel: toLabel ?? undefined,
+            };
+          });
+
+          setTransactions((prev) =>
+            prev.map((tx) => {
+              const fromLabel =
+                resolveFromLoadedMap(tx.fromFull ?? tx.from) ?? tx.fromLabel ?? null;
+              const toLabel = resolveFromLoadedMap(tx.toFull ?? tx.to) ?? tx.toLabel ?? null;
+              return {
+                ...tx,
+                fromLabel: fromLabel ?? undefined,
+                toLabel: toLabel ?? undefined,
+              };
+            }),
+          );
+        },
+      );
     }
 
     const resolveExchangeLabel = (address: string) =>

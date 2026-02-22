@@ -1,4 +1,4 @@
-import { FlowPoint } from "../services/analyticsData";
+import type { FlowPoint } from "../services/analyticsData";
 import {
   CartesianGrid,
   ComposedChart,

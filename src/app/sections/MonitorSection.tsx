@@ -93,7 +93,7 @@ export function MonitorSection({
                     <p className="text-xs text-muted-foreground">
                       {monitorModel.feedMode === "live"
                         ? "Node-edge view from current stream session"
-                        : `Exchange-centric 24H edges (Dune snapshot as of ${monitorModel.asOfLabel})`}
+                        : `Exchange-centric 24H edges (BigQuery snapshot as of ${monitorModel.asOfLabel})`}
                     </p>
                   </div>
                   <div className="flex items-center gap-2">
@@ -148,7 +148,7 @@ export function MonitorSection({
                       monitorModel.feedMode === "top24h" ? monitorModel.edgePoints24h : undefined
                     }
                     selectedWallet={selectedWallet}
-                    onWalletSelect={onWalletSelect}
+                    onWalletSelect={(wallet) => onWalletSelect(wallet)}
                   />
                 </div>
               </div>
@@ -179,7 +179,7 @@ export function MonitorSection({
               controlsOpen={controlsOpen}
               onControlsOpenChange={onControlsOpenChange}
               selectedWallet={selectedWallet}
-              onWalletSelect={onWalletSelect}
+              onWalletSelect={(wallet) => onWalletSelect(wallet)}
               controlsPanel={
                 <FeedControlsPanel
                   token={token}

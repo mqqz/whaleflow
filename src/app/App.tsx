@@ -85,7 +85,7 @@ export default function App() {
           />
         )}
 
-        {activeSection === "impact" && <ImpactPage token={token} transactions={transactions} />}
+        {activeSection === "impact" && <ImpactPage token={token} />}
 
         {activeSection === "explorer" && (
           <ExplorerPage

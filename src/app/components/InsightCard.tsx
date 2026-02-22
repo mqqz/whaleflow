@@ -13,6 +13,7 @@ export interface InsightCardData {
 interface InsightCardProps {
   insight: InsightCardData;
   statsLabel?: string;
+  suppressStatsFallback?: boolean;
 }
 
 const trendClass = (trend: "positive" | "negative" | "neutral") => {
@@ -21,7 +22,11 @@ const trendClass = (trend: "positive" | "negative" | "neutral") => {
   return "text-muted-foreground";
 };
 
-export function InsightCard({ insight, statsLabel = "Last 3h" }: InsightCardProps) {
+export function InsightCard({
+  insight,
+  statsLabel = "Last 3h",
+  suppressStatsFallback = false,
+}: InsightCardProps) {
   const numberClass = trendClass(insight.trend);
 
   return (
@@ -39,7 +44,7 @@ export function InsightCard({ insight, statsLabel = "Last 3h" }: InsightCardProp
           <span className={numberClass}>{insight.symbol}</span>{" "}
           <span className={numberClass}>{insight.deltaPct}</span>)
         </p>
-      ) : (
+      ) : suppressStatsFallback ? null : (
         <p className="mt-1 text-xs text-muted-foreground">
           Need at least 6-8 buckets to compare momentum.
         </p>

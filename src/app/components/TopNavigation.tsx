@@ -7,8 +7,6 @@ import {
   SelectContent,
   SelectGroup,
   SelectItem,
-  SelectLabel,
-  SelectSeparator,
   SelectTrigger,
   SelectValue,
 } from "./ui/select";
@@ -120,16 +118,6 @@ export function TopNavigation({
                 </SelectTrigger>
                 <SelectContent>
                   <SelectGroup>
-                    <SelectLabel>Trade stream symbol</SelectLabel>
-                    <SelectSeparator />
-                    <SelectItem
-                      value="btc"
-                      icon={
-                        <SelectorIcon src={tokenMeta.btc.iconSrc} label={tokenMeta.btc.label} />
-                      }
-                    >
-                      {tokenMeta.btc.label}
-                    </SelectItem>
                     <SelectItem
                       value="eth"
                       icon={
@@ -137,6 +125,19 @@ export function TopNavigation({
                       }
                     >
                       {tokenMeta.eth.label}
+                    </SelectItem>
+                    <SelectItem
+                      value="btc"
+                      disabled
+                      icon={
+                        <SelectorIcon src={tokenMeta.btc.iconSrc} label={tokenMeta.btc.label} />
+                      }
+                      className="opacity-60"
+                    >
+                      <span className="inline-flex items-center gap-1">
+                        <span>{tokenMeta.btc.label}</span>
+                        <span className="text-[10px] text-muted-foreground">(coming soon)</span>
+                      </span>
                     </SelectItem>
                   </SelectGroup>
                 </SelectContent>
