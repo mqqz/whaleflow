@@ -24,6 +24,9 @@ export interface CounterpartyStat {
   tag: WalletTag;
 }
 
+export type ExplorerSortColumn = "timestamp" | "from" | "to" | "amount" | "direction";
+export type ExplorerSortDirection = "asc" | "desc";
+
 interface UseExploreModelOptions {
   network: string;
   token: string;
@@ -65,10 +68,8 @@ export function useExploreModel({
   const { data: analyticsData, loading: analyticsLoading } = useExchangeAnalytics();
   const [searchValue, setSearchValue] = useState(selectedWallet ?? "");
   const [walletAddress, setWalletAddress] = useState(selectedWallet ?? "");
-  const [directionFilter, setDirectionFilter] = useState<"all" | "in" | "out">("all");
-  const [tagFilter, setTagFilter] = useState<"all" | "exchange" | "contract" | "none">("all");
-  const [sortBy, setSortBy] = useState<"timestamp" | "amount">("timestamp");
-  const [sortDirection, setSortDirection] = useState<"asc" | "desc">("desc");
+  const [sortColumn, setSortColumn] = useState<ExplorerSortColumn | null>(null);
+  const [sortDirection, setSortDirection] = useState<ExplorerSortDirection | null>(null);
   const [apiData, setApiData] = useState<ExplorerWalletData | null>(null);
   const [apiStatus, setApiStatus] = useState<"idle" | "loading" | "ready" | "error">("idle");
   const [apiError, setApiError] = useState<string | null>(null);
@@ -256,19 +257,58 @@ export function useExploreModel({
     return [...byWallet.values()].sort((a, b) => b.total - a.total);
   }, [rows]);
 
+  const toggleSort = useCallback(
+    (column: ExplorerSortColumn) => {
+      if (sortColumn !== column) {
+        setSortColumn(column);
+        setSortDirection("asc");
+        return;
+      }
+      if (sortDirection === "asc") {
+        setSortDirection("desc");
+        return;
+      }
+      setSortColumn(null);
+      setSortDirection(null);
+    },
+    [sortColumn, sortDirection],
+  );
+
   const filteredRows = useMemo(() => {
-    const byFilter = rows.filter((row) => {
-      if (directionFilter !== "all" && row.direction !== directionFilter) return false;
-      if (tagFilter !== "all" && row.tag !== tagFilter) return false;
-      return true;
-    });
+    const byFilter = rows;
+
+    if (!sortColumn || !sortDirection) {
+      return byFilter;
+    }
 
     return [...byFilter].sort((a, b) => {
       const factor = sortDirection === "asc" ? 1 : -1;
-      if (sortBy === "amount") return (a.amount - b.amount) * factor;
-      return (a.tx.timestampMs - b.tx.timestampMs) * factor;
+      let compare = 0;
+
+      switch (sortColumn) {
+        case "timestamp":
+          compare = a.tx.timestampMs - b.tx.timestampMs;
+          break;
+        case "from":
+          compare = a.tx.from.localeCompare(b.tx.from);
+          break;
+        case "to":
+          compare = a.tx.to.localeCompare(b.tx.to);
+          break;
+        case "amount":
+          compare = a.amount - b.amount;
+          break;
+        case "direction":
+          compare = a.direction.localeCompare(b.direction);
+          break;
+      }
+
+      if (compare === 0) {
+        return b.tx.timestampMs - a.tx.timestampMs;
+      }
+      return compare * factor;
     });
-  }, [rows, directionFilter, tagFilter, sortBy, sortDirection]);
+  }, [rows, sortColumn, sortDirection]);
 
   const egoTransactions = useMemo(() => {
     if (!normalizedWallet) {
@@ -343,14 +383,9 @@ export function useExploreModel({
     apiStatus,
     apiDataSource: apiData?.source ?? "Live stream",
     apiError,
-    directionFilter,
-    setDirectionFilter,
-    tagFilter,
-    setTagFilter,
-    sortBy,
-    setSortBy,
+    sortColumn,
     sortDirection,
-    setSortDirection,
+    toggleSort,
     summary,
     edgeSummary,
     counterpartyStats,

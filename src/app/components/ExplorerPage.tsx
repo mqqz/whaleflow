@@ -1,13 +1,20 @@
-import { ArrowDownUp, Search } from "lucide-react";
+import { ArrowDown, ArrowUp, ArrowUpDown, Search } from "lucide-react";
 import { LiveTransaction } from "../hooks/useLiveTransactions";
 import { Button } from "./ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "./ui/card";
 import { Input } from "./ui/input";
 import { Badge } from "./ui/badge";
 import { NetworkGraph } from "./NetworkGraph";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "./ui/select";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "./ui/table";
-import { WalletTag, useExploreModel } from "../hooks/useExploreModel";
+import {
+  Table,
+  TableBody,
+  TableCaption,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "./ui/table";
+import { useExploreModel } from "../hooks/useExploreModel";
 
 interface ExplorerPageProps {
   network: string;
@@ -43,10 +50,20 @@ const formatDateTime = (timestampMs: number) =>
     minute: "2-digit",
   });
 
-const tagBadgeClass: Record<WalletTag, string> = {
-  exchange: "bg-amber-500/15 text-amber-500 border-amber-500/30",
-  contract: "bg-sky-500/15 text-sky-400 border-sky-500/30",
-  none: "bg-muted/40 text-muted-foreground border-border",
+const SortSymbol = ({
+  active,
+  direction,
+}: {
+  active: boolean;
+  direction: "asc" | "desc" | null;
+}) => {
+  if (!active || !direction) {
+    return <ArrowUpDown className="h-3.5 w-3.5 text-muted-foreground" />;
+  }
+  if (direction === "asc") {
+    return <ArrowUp className="h-3.5 w-3.5 text-primary" />;
+  }
+  return <ArrowDown className="h-3.5 w-3.5 text-primary" />;
 };
 
 export function ExplorerPage({
@@ -191,7 +208,18 @@ export function ExplorerPage({
           <CardTitle>{model.graphTitle}</CardTitle>
         </CardHeader>
         <CardContent>
-          {model.graphEmpty ? (
+          {model.apiStatus === "loading" && model.normalizedWallet ? (
+            <div className="flex h-[430px] items-center justify-center text-sm text-muted-foreground">
+              <span className="inline-flex items-center gap-0.5">
+                <span>Fetching data</span>
+                <span className="inline-flex">
+                  <span className="animate-pulse [animation-delay:0ms]">.</span>
+                  <span className="animate-pulse [animation-delay:180ms]">.</span>
+                  <span className="animate-pulse [animation-delay:360ms]">.</span>
+                </span>
+              </span>
+            </div>
+          ) : model.graphEmpty ? (
             <div className="flex h-[430px] items-center justify-center text-sm text-muted-foreground">
               Load a wallet with observed transactions to render the 1-2 hop network.
             </div>
@@ -233,9 +261,6 @@ export function ExplorerPage({
                     <p className="text-[11px] text-muted-foreground">{item.txCount} tx</p>
                   </div>
                   <div className="flex items-center gap-2 pl-2">
-                    <Badge variant="outline" className={tagBadgeClass[item.tag]}>
-                      {item.tag}
-                    </Badge>
                     <span className="text-xs font-semibold">
                       {formatAmount(item.total, model.tokenLabel)}
                     </span>
@@ -247,135 +272,136 @@ export function ExplorerPage({
         </Card>
 
         <Card className="bg-card/60 border-border/60">
-          <CardHeader className="gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <CardHeader>
             <CardTitle>Transaction Table</CardTitle>
-            <div className="flex flex-wrap items-center gap-2">
-              <Select
-                value={model.directionFilter}
-                onValueChange={(value: "all" | "in" | "out") => model.setDirectionFilter(value)}
-              >
-                <SelectTrigger className="h-8 w-[110px]">
-                  <SelectValue placeholder="Direction" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">All</SelectItem>
-                  <SelectItem value="in">In</SelectItem>
-                  <SelectItem value="out">Out</SelectItem>
-                </SelectContent>
-              </Select>
-
-              <Select
-                value={model.tagFilter}
-                onValueChange={(value: "all" | "exchange" | "contract" | "none") =>
-                  model.setTagFilter(value)
-                }
-              >
-                <SelectTrigger className="h-8 w-[130px]">
-                  <SelectValue placeholder="Tag" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">All tags</SelectItem>
-                  <SelectItem value="exchange">Exchange</SelectItem>
-                  <SelectItem value="contract">Contract</SelectItem>
-                  <SelectItem value="none">None</SelectItem>
-                </SelectContent>
-              </Select>
-
-              <Select
-                value={model.sortBy}
-                onValueChange={(value: "timestamp" | "amount") => model.setSortBy(value)}
-              >
-                <SelectTrigger className="h-8 w-[140px]">
-                  <SelectValue placeholder="Sort by" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="timestamp">Timestamp</SelectItem>
-                  <SelectItem value="amount">Amount</SelectItem>
-                </SelectContent>
-              </Select>
-
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                className="h-8"
-                onClick={() =>
-                  model.setSortDirection((current) => (current === "asc" ? "desc" : "asc"))
-                }
-              >
-                <ArrowDownUp className="h-3.5 w-3.5" />
-                {model.sortDirection.toUpperCase()}
-              </Button>
-            </div>
           </CardHeader>
           <CardContent>
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Timestamp</TableHead>
-                  <TableHead>From</TableHead>
-                  <TableHead>To</TableHead>
-                  <TableHead className="text-right">Amount</TableHead>
-                  <TableHead>Direction</TableHead>
-                  <TableHead>Exchange/Contract Tag</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {model.filteredRows.length === 0 ? (
+            <div className="rounded-md border border-border/60">
+              <Table>
+                <TableCaption>
+                  Showing {model.filteredRows.length} transactions for the active wallet.
+                </TableCaption>
+                <TableHeader>
                   <TableRow>
-                    <TableCell colSpan={6} className="h-32 text-center text-muted-foreground">
-                      No rows match the active wallet and filters.
-                    </TableCell>
+                    <TableHead>
+                      <button
+                        type="button"
+                        className="inline-flex items-center gap-1 hover:text-foreground/90"
+                        onClick={() => model.toggleSort("timestamp")}
+                      >
+                        Timestamp
+                        <SortSymbol
+                          active={model.sortColumn === "timestamp"}
+                          direction={model.sortDirection}
+                        />
+                      </button>
+                    </TableHead>
+                    <TableHead>
+                      <button
+                        type="button"
+                        className="inline-flex items-center gap-1 hover:text-foreground/90"
+                        onClick={() => model.toggleSort("from")}
+                      >
+                        From
+                        <SortSymbol
+                          active={model.sortColumn === "from"}
+                          direction={model.sortDirection}
+                        />
+                      </button>
+                    </TableHead>
+                    <TableHead>
+                      <button
+                        type="button"
+                        className="inline-flex items-center gap-1 hover:text-foreground/90"
+                        onClick={() => model.toggleSort("to")}
+                      >
+                        To
+                        <SortSymbol
+                          active={model.sortColumn === "to"}
+                          direction={model.sortDirection}
+                        />
+                      </button>
+                    </TableHead>
+                    <TableHead className="text-right">
+                      <button
+                        type="button"
+                        className="ml-auto inline-flex items-center gap-1 hover:text-foreground/90"
+                        onClick={() => model.toggleSort("amount")}
+                      >
+                        Amount
+                        <SortSymbol
+                          active={model.sortColumn === "amount"}
+                          direction={model.sortDirection}
+                        />
+                      </button>
+                    </TableHead>
+                    <TableHead>
+                      <button
+                        type="button"
+                        className="inline-flex items-center gap-1 hover:text-foreground/90"
+                        onClick={() => model.toggleSort("direction")}
+                      >
+                        Direction
+                        <SortSymbol
+                          active={model.sortColumn === "direction"}
+                          direction={model.sortDirection}
+                        />
+                      </button>
+                    </TableHead>
                   </TableRow>
-                ) : (
-                  model.filteredRows.map((row) => (
-                    <TableRow key={row.tx.id}>
-                      <TableCell className="text-xs">
-                        {formatDateTime(row.tx.timestampMs)}
-                      </TableCell>
-                      <TableCell>
-                        <button
-                          type="button"
-                          onClick={() => model.selectWallet(row.tx.from)}
-                          className="font-mono text-xs hover:text-primary"
-                        >
-                          {shortWallet(row.tx.from)}
-                        </button>
-                      </TableCell>
-                      <TableCell>
-                        <button
-                          type="button"
-                          onClick={() => model.selectWallet(row.tx.to)}
-                          className="font-mono text-xs hover:text-primary"
-                        >
-                          {shortWallet(row.tx.to)}
-                        </button>
-                      </TableCell>
-                      <TableCell className="text-right text-xs font-semibold">
-                        {row.amount.toFixed(row.amount < 1 ? 4 : 2)} {model.tokenLabel}
-                      </TableCell>
-                      <TableCell>
-                        <Badge
-                          variant="outline"
-                          className={
-                            row.direction === "in"
-                              ? "bg-success/10 text-success border-success/30"
-                              : "bg-destructive/10 text-destructive border-destructive/30"
-                          }
-                        >
-                          {row.direction}
-                        </Badge>
-                      </TableCell>
-                      <TableCell>
-                        <Badge variant="outline" className={tagBadgeClass[row.tag]}>
-                          {row.tag}
-                        </Badge>
+                </TableHeader>
+                <TableBody>
+                  {model.filteredRows.length === 0 ? (
+                    <TableRow>
+                      <TableCell colSpan={5} className="h-32 text-center text-muted-foreground">
+                        No rows for the active wallet.
                       </TableCell>
                     </TableRow>
-                  ))
-                )}
-              </TableBody>
-            </Table>
+                  ) : (
+                    model.filteredRows.map((row) => (
+                      <TableRow key={row.tx.id}>
+                        <TableCell className="text-xs">
+                          {formatDateTime(row.tx.timestampMs)}
+                        </TableCell>
+                        <TableCell>
+                          <button
+                            type="button"
+                            onClick={() => model.selectWallet(row.tx.from)}
+                            className="font-mono text-xs hover:text-primary"
+                          >
+                            {shortWallet(row.tx.from)}
+                          </button>
+                        </TableCell>
+                        <TableCell>
+                          <button
+                            type="button"
+                            onClick={() => model.selectWallet(row.tx.to)}
+                            className="font-mono text-xs hover:text-primary"
+                          >
+                            {shortWallet(row.tx.to)}
+                          </button>
+                        </TableCell>
+                        <TableCell className="text-right text-xs font-semibold">
+                          {row.amount.toFixed(row.amount < 1 ? 4 : 2)} {model.tokenLabel}
+                        </TableCell>
+                        <TableCell>
+                          <Badge
+                            variant="outline"
+                            className={
+                              row.direction === "in"
+                                ? "bg-success/10 text-success border-success/30"
+                                : "bg-destructive/10 text-destructive border-destructive/30"
+                            }
+                          >
+                            {row.direction}
+                          </Badge>
+                        </TableCell>
+                      </TableRow>
+                    ))
+                  )}
+                </TableBody>
+              </Table>
+            </div>
           </CardContent>
         </Card>
       </div>
