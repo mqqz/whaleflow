@@ -4,6 +4,11 @@
   Live crypto on-chain flow intelligence
 </h1>
 <p align="center">
+<a href=https://mosadhan.com/whaleflow/>
+<img alt="Live Badge" src="https://img.shields.io/badge/mosadhan.com%2Fwhaleflow-_?style=for-the-badge&label=Live&labelColor=brightgreen&color=gray">
+</a>
+<br/>
+<br/>
 <a href="#project-overview">Overview</a> &nbsp;&bull;&nbsp;
 <a href="#data-sources">Data Sources</a> &nbsp;&bull;&nbsp;
 <a href="#methodology">Methodology</a> &nbsp;&bull;&nbsp;
@@ -180,8 +185,7 @@ This is best positioned as a monitoring complement, not a standalone trading mod
 
 ## Live Dashboard Link
 
-Go ahead and try it out:
-[Live Dashboard Link](https://mosadhan.com/whaleflow)
+Go ahead and try it out at [mosadhan.com/whaleflow](https://mosadhan.com/whaleflow/)
 
 ## Limitations
 
