@@ -177,7 +177,7 @@ export function useImpactModel({ token }: UseImpactModelOptions): UseImpactModel
 
     fetchPriceCandlesWithFallback({
       token,
-      rangeMs: RANGE_HOURS[range] * HOUR_MS,
+      rangeMs: RANGE_HOURS[range] * HOUR_MS * 2,
       interval: PRICE_INTERVAL[range],
       endMs: anchorNowMs,
     })
@@ -294,22 +294,122 @@ export function useImpactModel({ token }: UseImpactModelOptions): UseImpactModel
     });
   }, [flowWindow]);
 
+  const kpiFlowSeries = useMemo(() => {
+    const windowHours = range === "24h" ? 24 : 24 * 7;
+    const extendedWindow = selectLastNHours(exchangeFlow, windowHours * 2);
+    const whaleSeries = selectTier(tierFlow, "whale");
+    const whaleByTs = new Map<number, number>();
+    for (const point of whaleSeries) {
+      whaleByTs.set(point.bucket_ts.getTime(), point.tier_exchange_net_flow_eth);
+    }
+
+    const startTs = anchorNowMs - windowHours * 2 * HOUR_MS;
+    const priceByHour = aggregateCandlesHourly(candles, startTs);
+
+    return extendedWindow.map((point) => {
+      const ts = point.bucket_ts.getTime();
+      return {
+        ts,
+        net: whaleByTs.get(ts) ?? point.net_flow_eth,
+        price: priceByHour.get(ts) ?? null,
+      };
+    });
+  }, [anchorNowMs, candles, exchangeFlow, range, tierFlow]);
+
   const kpis = useMemo(() => {
-    const lastTotal = exchangeFlow.at(-1) ?? null;
-    const prevTotal = exchangeFlow.length > 1 ? exchangeFlow[exchangeFlow.length - 2] : null;
+    const rangeHours = RANGE_HOURS[range];
+    const windowPoints = range === "24h" ? 24 : 24 * 7;
+    const deltaHours = range === "7d" ? 24 : rangeHours;
+    const endTs = exchangeFlow.at(-1)?.bucket_ts.getTime() ?? null;
+    const rangeMs = rangeHours * HOUR_MS;
+    const deltaMs = deltaHours * HOUR_MS;
+
+    const sumWindow = <T>(
+      rows: T[],
+      getTs: (row: T) => number,
+      getValue: (row: T) => number,
+      start: number,
+      end: number,
+    ) =>
+      rows
+        .filter((row) => {
+          const ts = getTs(row);
+          return ts >= start && ts < end;
+        })
+        .reduce((sum, row) => sum + getValue(row), 0);
 
     const whaleSeries = selectTier(tierFlow, "whale");
-    const lastWhale = whaleSeries.at(-1) ?? null;
-    const prevWhale = whaleSeries.length > 1 ? whaleSeries[whaleSeries.length - 2] : null;
+    const currentStart = endTs === null ? null : endTs - rangeMs;
+    const deltaCurrentStart = endTs === null ? null : endTs - deltaMs;
+    const deltaPrevStart = deltaCurrentStart === null ? null : deltaCurrentStart - deltaMs;
+    const deltaPrevEnd = deltaCurrentStart === null ? null : deltaCurrentStart - HOUR_MS;
 
-    const lastTotalNet = lastTotal?.net_flow_eth ?? null;
-    const prevTotalNet = prevTotal?.net_flow_eth ?? null;
-    const lastWhaleNet = lastWhale?.tier_exchange_net_flow_eth ?? null;
-    const prevWhaleNet = prevWhale?.tier_exchange_net_flow_eth ?? null;
+    const currentTotalNet =
+      endTs === null || currentStart === null
+        ? null
+        : sumWindow(
+            exchangeFlow,
+            (row) => row.bucket_ts.getTime(),
+            (row) => row.net_flow_eth,
+            currentStart,
+            endTs + 1,
+          );
+    const currentWhaleNet =
+      endTs === null || currentStart === null
+        ? null
+        : sumWindow(
+            whaleSeries,
+            (row) => row.bucket_ts.getTime(),
+            (row) => row.tier_exchange_net_flow_eth,
+            currentStart,
+            endTs + 1,
+          );
+    const deltaCurrentTotalNet =
+      endTs === null || deltaCurrentStart === null
+        ? null
+        : sumWindow(
+            exchangeFlow,
+            (row) => row.bucket_ts.getTime(),
+            (row) => row.net_flow_eth,
+            deltaCurrentStart,
+            endTs + 1,
+          );
+    const deltaPrevTotalNet =
+      deltaPrevStart === null || deltaPrevEnd === null
+        ? null
+        : sumWindow(
+            exchangeFlow,
+            (row) => row.bucket_ts.getTime(),
+            (row) => row.net_flow_eth,
+            deltaPrevStart,
+            deltaPrevEnd + 1,
+          );
+    const deltaCurrentWhaleNet =
+      endTs === null || deltaCurrentStart === null
+        ? null
+        : sumWindow(
+            whaleSeries,
+            (row) => row.bucket_ts.getTime(),
+            (row) => row.tier_exchange_net_flow_eth,
+            deltaCurrentStart,
+            endTs + 1,
+          );
+    const deltaPrevWhaleNet =
+      deltaPrevStart === null || deltaPrevEnd === null
+        ? null
+        : sumWindow(
+            whaleSeries,
+            (row) => row.bucket_ts.getTime(),
+            (row) => row.tier_exchange_net_flow_eth,
+            deltaPrevStart,
+            deltaPrevEnd + 1,
+          );
 
-    const pricePoints = flowPriceSeries.filter((point) => point.price !== null) as Array<
-      ImpactFlowPricePoint & { price: number }
-    >;
+    const pricePoints = kpiFlowSeries.filter((point) => point.price !== null) as Array<{
+      ts: number;
+      net: number;
+      price: number;
+    }>;
 
     const returns: Array<{ ts: number; ret: number }> = [];
     for (let idx = 1; idx < pricePoints.length; idx += 1) {
@@ -324,13 +424,17 @@ export function useImpactModel({ token }: UseImpactModelOptions): UseImpactModel
       retByTs.set(row.ts, row.ret);
     }
 
-    const corrWindow = flowPriceSeries
-      .slice(-24)
+    const corrWindow = kpiFlowSeries
+      .slice(-windowPoints)
       .filter((point) => retByTs.has(point.ts))
       .map((point) => ({ flow: point.net, ret: retByTs.get(point.ts)! }));
-
-    const prevCorrWindow = flowPriceSeries
-      .slice(-48, -24)
+    const corrDeltaWindow = range === "7d" ? 24 : windowPoints;
+    const corrDeltaCurrent = kpiFlowSeries
+      .slice(-corrDeltaWindow)
+      .filter((point) => retByTs.has(point.ts))
+      .map((point) => ({ flow: point.net, ret: retByTs.get(point.ts)! }));
+    const corrDeltaPrev = kpiFlowSeries
+      .slice(-(corrDeltaWindow * 2), -corrDeltaWindow)
       .filter((point) => retByTs.has(point.ts))
       .map((point) => ({ flow: point.net, ret: retByTs.get(point.ts)! }));
 
@@ -339,44 +443,54 @@ export function useImpactModel({ token }: UseImpactModelOptions): UseImpactModel
       corrWindow.map((row) => row.ret),
     );
 
-    const corrPrev = correlation(
-      prevCorrWindow.map((row) => row.flow),
-      prevCorrWindow.map((row) => row.ret),
+    const corrDeltaCurrentValue = correlation(
+      corrDeltaCurrent.map((row) => row.flow),
+      corrDeltaCurrent.map((row) => row.ret),
+    );
+    const corrDeltaPrevValue = correlation(
+      corrDeltaPrev.map((row) => row.flow),
+      corrDeltaPrev.map((row) => row.ret),
     );
 
-    const whaleShareNow = calcWhaleShare(lastWhaleNet, lastTotalNet);
-    const whaleSharePrev = calcWhaleShare(prevWhaleNet, prevTotalNet);
-    const recentReturns = returns.slice(-24).map((row) => row.ret);
-    const prevReturns = returns.slice(-48, -24).map((row) => row.ret);
+    const whaleShareNow = calcWhaleShare(currentWhaleNet, currentTotalNet);
+    const whaleShareDeltaCurrent = calcWhaleShare(deltaCurrentWhaleNet, deltaCurrentTotalNet);
+    const whaleShareDeltaPrev = calcWhaleShare(deltaPrevWhaleNet, deltaPrevTotalNet);
+    const recentReturns = returns.slice(-windowPoints).map((row) => row.ret);
+    const volDeltaWindow = range === "7d" ? 24 : windowPoints;
+    const volDeltaCurrentReturns = returns.slice(-volDeltaWindow).map((row) => row.ret);
+    const volDeltaPrevReturns = returns
+      .slice(-(volDeltaWindow * 2), -volDeltaWindow)
+      .map((row) => row.ret);
     const rollingVol = stdDev(recentReturns);
-    const rollingVolPrev = stdDev(prevReturns);
+    const rollingVolDeltaCurrent = stdDev(volDeltaCurrentReturns);
+    const rollingVolDeltaPrev = stdDev(volDeltaPrevReturns);
 
     return {
       netExchangeFlow1h: {
-        value: lastTotalNet,
-        pct: toPctChange(lastTotalNet, prevTotalNet),
+        value: currentTotalNet,
+        pct: toPctChange(deltaCurrentTotalNet, deltaPrevTotalNet),
       },
       whaleExchangeNetFlow1h: {
-        value: lastWhaleNet,
-        pct: toPctChange(lastWhaleNet, prevWhaleNet),
+        value: currentWhaleNet,
+        pct: toPctChange(deltaCurrentWhaleNet, deltaPrevWhaleNet),
       },
       whaleShare: {
         value: whaleShareNow,
-        pct: toPctChange(whaleShareNow, whaleSharePrev),
+        pct: toPctChange(whaleShareDeltaCurrent, whaleShareDeltaPrev),
       },
       rollingVolatility24h: {
         value: rollingVol === null ? null : rollingVol * 100,
         pct:
-          rollingVol === null || rollingVolPrev === null
+          rollingVolDeltaCurrent === null || rollingVolDeltaPrev === null
             ? null
-            : toPctChange(rollingVol * 100, rollingVolPrev * 100),
+            : toPctChange(rollingVolDeltaCurrent * 100, rollingVolDeltaPrev * 100),
       },
       flowReturnCorr24h: {
         value: corrCurrent,
-        pct: toPctChange(corrCurrent, corrPrev),
+        pct: toPctChange(corrDeltaCurrentValue, corrDeltaPrevValue),
       },
     };
-  }, [exchangeFlow, flowPriceSeries, tierFlow]);
+  }, [exchangeFlow, kpiFlowSeries, range, tierFlow]);
 
   const insight = useMemo(() => {
     const corr = kpis.flowReturnCorr24h.value;

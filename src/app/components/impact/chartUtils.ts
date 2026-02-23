@@ -10,6 +10,15 @@ export const PAD_LEFT = 42;
 export const formatShortTime = (ts: number) =>
   new Date(ts).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
 
+export const formatAxisTick = (ts: number, minTs: number, maxTs: number) => {
+  const spanMs = Math.max(0, maxTs - minTs);
+  const oneDayMs = 24 * 60 * 60 * 1000;
+  if (spanMs >= oneDayMs * 2) {
+    return new Date(ts).toLocaleDateString([], { month: "short", day: "2-digit" });
+  }
+  return formatShortTime(ts);
+};
+
 export const formatCompact = (value: number) => {
   if (!Number.isFinite(value)) {
     return "0";

@@ -8,8 +8,8 @@ import {
   PAD_LEFT,
   PAD_RIGHT,
   PAD_TOP,
+  formatAxisTick,
   formatCompact,
-  formatShortTime,
   useElementSize,
 } from "./chartUtils";
 
@@ -89,7 +89,7 @@ export function CumulativeFlowChart({ points }: CumulativeFlowChartProps) {
                   opacity="0.16"
                 />
                 <text x={x(tick)} y={H - 6} textAnchor="middle" fontSize="10" fill="#64748B">
-                  {formatShortTime(+tick)}
+                  {formatAxisTick(+tick, minTs, maxTs)}
                 </text>
               </g>
             ))}

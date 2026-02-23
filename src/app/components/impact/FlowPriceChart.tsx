@@ -9,16 +9,13 @@ import {
   PAD_LEFT,
   PAD_RIGHT,
   PAD_TOP,
+  formatAxisTick,
   formatCompact,
-  formatShortTime,
   useElementSize,
 } from "./chartUtils";
-import { ImpactRange } from "../../hooks/useImpactModel";
 
 interface FlowPriceChartProps {
   points: ImpactFlowPricePoint[];
-  range: ImpactRange;
-  onRangeChange: (value: ImpactRange) => void;
   lagHours: 0 | 1 | 3;
   onLagHoursChange: (value: 0 | 1 | 3) => void;
   priceSource: string;
@@ -28,8 +25,6 @@ interface FlowPriceChartProps {
 
 export function FlowPriceChart({
   points,
-  range,
-  onRangeChange,
   lagHours,
   onLagHoursChange,
   priceSource,
@@ -113,22 +108,7 @@ export function FlowPriceChart({
           </p>
         </div>
         <div className="flex items-center gap-2 shrink-0 justify-self-end">
-          <div className="inline-flex items-center rounded-md border border-border/60 bg-background/25 overflow-hidden">
-            {(["24h", "7d"] as ImpactRange[]).map((value) => (
-              <button
-                key={value}
-                type="button"
-                onClick={() => onRangeChange(value)}
-                className={`h-8 px-3 text-xs uppercase transition-colors ${
-                  range === value
-                    ? "bg-secondary text-foreground"
-                    : "text-muted-foreground hover:text-foreground"
-                }`}
-              >
-                {value.toUpperCase()}
-              </button>
-            ))}
-          </div>
+          <span className="text-[11px] uppercase tracking-wide text-muted-foreground">Lag</span>
           <div className="inline-flex items-center rounded-md border border-border/60 bg-background/25 overflow-hidden">
             {([0, 1, 3] as const).map((lag) => (
               <button
@@ -176,7 +156,7 @@ export function FlowPriceChart({
                   opacity="0.16"
                 />
                 <text x={x(tick)} y={H - 6} textAnchor="middle" fontSize="10" fill="#64748B">
-                  {formatShortTime(+tick)}
+                  {formatAxisTick(+tick, minTs, maxTs)}
                 </text>
               </g>
             ))}
