@@ -170,7 +170,11 @@ export function MonitorSection({
               <div className="h-full flex flex-col bg-card/60 backdrop-blur-sm border border-border/60 rounded-xl p-4">
                 <div className="flex items-center justify-between pb-3 border-b border-border/50">
                   <div>
-                    <h3 className="font-semibold text-base">Live Wallet Network Graph</h3>
+                    <h3 className="font-semibold text-base">
+                      {monitorModel.feedMode === "live"
+                        ? "Live Wallet Network Graph"
+                        : "24H Liquidity Flow Network Graph"}
+                    </h3>
                     <p className="text-xs text-muted-foreground">
                       {monitorModel.feedMode === "live"
                         ? "Node-edge view from current stream session"
