@@ -7,7 +7,7 @@
 <a href="#project-overview">Overview</a> &nbsp;&bull;&nbsp;
 <a href="#data-sources">Data Sources</a> &nbsp;&bull;&nbsp;
 <a href="#methodology">Methodology</a> &nbsp;&bull;&nbsp;
-<a href="#dashboard">Dashboard</a> &nbsp;&bull;&nbsp;
+<a href="#dashboard-preview">Dashboard Preview</a> &nbsp;&bull;&nbsp;
 <a href="#design">Design</a> &nbsp;&bull;&nbsp;
 <a href="#key-insights">Insights</a> &nbsp;&bull;&nbsp;
 <a href="#limitations">Limitations</a>
@@ -33,29 +33,24 @@ The core question behind the project is straightforward:
 
 ## Data Sources
 
-- **CoinGecko Public API**  
-  Used to retrieve real-time and historical market data including price, market capitalization, and trading volume for major cryptocurrencies.
-  This data was integrated to contextualize on-chain capital flows against broader market conditions.  
-  Documentation: https://www.coingecko.com/en/api/documentation  
-  API Base: https://api.coingecko.com/api/v3/
+- **[Google BigQuery](https://cloud.google.com/bigquery) (Public Blockchain Datasets)**  
+  Queried Ethereum transaction data from Google BigQuery’s public crypto datasets to efficiently aggregate high-volume historical transaction records using SQL.
+  BigQuery served as the primary data warehouse for large-scale transformations and time-based aggregations.
+  
+   **SQL Queries used for BigQuery are available at `sql/` for your reference** 
 
-- **PublicNode Ethereum RPC (WebSockets)**  
-  Leveraged for streaming live Ethereum transaction data via WebSocket connections. This enabled monitoring of real-time transfers, particularly high-value transactions (“whale” activity), without maintaining a private node infrastructure.  
-  Documentation: https://publicnode.com/  
+- **[PublicNode](https://publicnode.com/) Ethereum RPC (WebSockets)**  
+  Leveraged for streaming live Ethereum transaction data via WebSocket connections. This enabled monitoring of real-time transfers, particularly high-value transactions (“whale” activity),
+  without maintaining a private node infrastructure.  
   Ethereum WSS Endpoint: wss://ethereum.publicnode.com
 
-- **Dune Address Labels**  
+- **[Dune](https://dune.com/) Address Labels**  
   Used exchange-labeled wallet datasets curated by the Dune community to classify transactions as exchange inflows or outflows.
-  These labels were essential for transforming raw address-level transfers into meaningful liquidity flow metrics.  
-  Platform: https://dune.com/  
-  Example Labels Dataset: https://dune.com/labels
-
-- **Google BigQuery (Public Blockchain Datasets)**  
-  Queried Ethereum transaction data from Google BigQuery’s public crypto datasets to efficiently aggregate high-volume historical transaction records using SQL.
-  BigQuery served as the primary data warehouse for large-scale transformations and time-based aggregations.  
-  Public Datasets: https://cloud.google.com/bigquery/public-data  
-  Crypto Ethereum Dataset: https://console.cloud.google.com/marketplace/product/ethereum/crypto-ethereum
-
+  
+- **[CoinGecko](https://www.coingecko.com) Public API**  
+  Used to retrieve real-time and historical market data including price, market capitalization, and trading volume for major cryptocurrencies.
+  This data was integrated to contextualize on-chain capital flows against broader market conditions.  
+  
 ## Methodology
 
 This section outlines the analytical workflow used to transform raw blockchain transaction data into structured liquidity metrics and decision-support insights.
@@ -132,9 +127,22 @@ Raw Blockchain Data -> Cleaning & Validation -> Aggregation & KPI Construction -
 
 Each stage was designed to ensure that insights are grounded in accurate data, clearly defined metrics, and stakeholder-oriented presentation.
 
-## Dashboard
+## Dashboard Preview
 
-![Live Network Graph](https://github.com/mqqz/whaleflow/blob/main/screencaps/live_network.gif)
+<details>
+  <summary>Live Network Graph</summary>
+  <img src=https://github.com/mqqz/whaleflow/blob/main/screencaps/live_network.gif alt="Live Network Graph"/>
+</details>
+
+<details>
+  <summary>24H Network Graph</summary>
+  <img src=https://github.com/mqqz/whaleflow/blob/main/screencaps/24h_network.png alt="24H Network Graph"/>
+</details>
+
+<details>
+  <summary>Impact Page</summary>
+  <img src=https://github.com/mqqz/whaleflow/blob/main/screencaps/impact_page.png alt="Live Network Graph"/>
+</details>
 
 ## Design
 
