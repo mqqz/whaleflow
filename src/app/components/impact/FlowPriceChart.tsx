@@ -2,6 +2,7 @@ import { useMemo, useState } from "react";
 import * as d3 from "d3";
 import { Card, CardContent, CardHeader, CardTitle } from "../ui/card";
 import { ImpactFlowPricePoint } from "../../hooks/useImpactModel";
+import { InfoHover } from "../InfoHover";
 import {
   FALLBACK_H,
   FALLBACK_W,
@@ -98,7 +99,15 @@ export function FlowPriceChart({
     <Card className="bg-card/60 border-border/60 h-[430px] rounded-xl flex flex-col overflow-hidden">
       <CardHeader className="grid grid-cols-[minmax(0,1fr)_auto] items-start space-y-0 pb-3 border-b border-border/50 gap-3">
         <div className="min-w-0">
-          <CardTitle className="truncate">ETH Price + Exchange Flow Impact</CardTitle>
+          <div className="flex items-center gap-1.5">
+            <CardTitle className="truncate">ETH Price + Exchange Flow Impact</CardTitle>
+            <InfoHover
+              title="ETH Price + Exchange Flow Impact"
+              summary="Compares exchange net flow and ETH price index over the same timeline."
+              interpretation="If flow and price move together consistently, flow may be a stronger directional signal; if they diverge, signal confidence is lower."
+              significance="Helps non-technical stakeholders assess whether liquidity movement is currently translating into price behavior."
+            />
+          </div>
           <p className={`text-xs mt-1 ${error ? "text-destructive" : "text-muted-foreground"}`}>
             {error
               ? error

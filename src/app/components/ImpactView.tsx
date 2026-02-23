@@ -30,7 +30,6 @@ export function ImpactPage({ token }: ImpactPageProps) {
   const [impactControlsOpen, setImpactControlsOpen] = useState(true);
   const rangeLabel = model.range === "24h" ? "24H" : "7D";
   const rangePoints = model.range === "24h" ? 24 : 24 * 7;
-  const deltaLabel = model.range === "7d" ? "24H" : rangeLabel;
 
   const kpiCards = [
     {
@@ -48,11 +47,11 @@ export function ImpactPage({ token }: ImpactPageProps) {
       deltaPct: model.kpis.netExchangeFlow1h.pct,
       info: {
         summary:
-          "Net flow across the currently selected Impact Feed range for all exchange-labeled transfers.",
+          "Indicates whether exchanges saw net withdrawals or net deposits in the selected window.",
         details: [
-          `Value = sum of net_flow_eth over the latest ${rangeLabel} window (outflow − inflow).`,
-          `Δ% compares latest ${deltaLabel} flow vs the previous ${deltaLabel} flow.`,
-          "If the previous window is ~0, delta is shown as n/a.",
+          `How calculated: sum of net_flow_eth over ${rangeLabel} (outflow − inflow).`,
+          "How to interpret: Positive suggests net coins leaving exchanges (often accumulation); negative suggests net coins entering exchanges (often sell pressure).",
+          "Why it matters: Gives a high-level read of liquidity pressure and directional risk.",
         ],
       },
     },
@@ -70,11 +69,11 @@ export function ImpactPage({ token }: ImpactPageProps) {
             : "text-destructive",
       deltaPct: model.kpis.whaleExchangeNetFlow1h.pct,
       info: {
-        summary: "Whale-tier net flow across the currently selected Impact Feed range.",
+        summary: "Shows whether large holders (whales) are net moving funds on or off exchanges.",
         details: [
-          `Value = sum of whale tier_exchange_net_flow_eth over the latest ${rangeLabel} window.`,
-          `Δ% compares latest ${deltaLabel} whale flow vs the previous ${deltaLabel} whale flow.`,
-          "Positive means whales are net withdrawing from exchanges over the selected range.",
+          `How calculated: sum of whale tier_exchange_net_flow_eth over ${rangeLabel}.`,
+          "How to interpret: Positive means whales are net withdrawing from exchanges; negative means net depositing to exchanges.",
+          "Why it matters: Whale flows often move earlier than broad market flows and can be a leading risk signal.",
         ],
       },
     },
@@ -86,11 +85,11 @@ export function ImpactPage({ token }: ImpactPageProps) {
           : `${(model.kpis.whaleShare.value * 100).toFixed(1)}%`,
       deltaPct: model.kpis.whaleShare.pct,
       info: {
-        summary: "How much of current-range exchange net flow is explained by whale flow.",
+        summary: "Measures how concentrated current exchange flow is in whale activity.",
         details: [
-          `Share = |whale net flow (${rangeLabel})| ÷ max(ε, |total net flow (${rangeLabel})|).`,
-          "Displayed as a percentage.",
-          `Δ% compares latest ${deltaLabel} share vs the previous ${deltaLabel} share.`,
+          "How calculated: |whale net flow| ÷ |total net flow| for the selected range, shown as a %. ",
+          "How to interpret: Higher share means fewer large players are driving flow; lower share means broader participation.",
+          "Why it matters: Highlights concentration risk and whether current flow may be less stable.",
         ],
       },
     },
@@ -102,11 +101,11 @@ export function ImpactPage({ token }: ImpactPageProps) {
           : `${formatValue(model.kpis.rollingVolatility24h.value, 2)}%`,
       deltaPct: model.kpis.rollingVolatility24h.pct,
       info: {
-        summary: "Sample standard deviation of hourly price returns over the selected range.",
+        summary: "Tracks how unstable price movement has been over the selected window.",
         details: [
-          "Returns are built from hourly-aligned close prices.",
-          `Value = σ of the last ${rangePoints} return points, then scaled to percent.`,
-          `Δ% compares latest ${deltaLabel} volatility vs the previous ${deltaLabel} volatility.`,
+          `How calculated: standard deviation (σ) of hourly returns across the last ${rangePoints} points.`,
+          "How to interpret: Higher values mean larger swings and higher uncertainty; lower values mean calmer conditions.",
+          "Why it matters: Supports risk posture, sizing, and communication of expected turbulence.",
         ],
       },
     },
@@ -115,32 +114,25 @@ export function ImpactPage({ token }: ImpactPageProps) {
       value: formatValue(model.kpis.flowReturnCorr24h.value, 3),
       deltaPct: model.kpis.flowReturnCorr24h.pct,
       info: {
-        summary: "Pearson correlation between flow and price returns over the selected range.",
+        summary: "Shows whether flow direction and price direction are moving together.",
         details: [
-          "Flow input is net flow series; return input is hourly price return series.",
-          `Value = Pearson ρ over the latest ${rangePoints} aligned points.`,
-          `Δ% compares latest ${deltaLabel} correlation vs the previous ${deltaLabel} correlation.`,
+          `How calculated: Pearson correlation (ρ) between net flow and hourly price returns over ${rangePoints} aligned points.`,
+          "How to interpret: Near +1 means flow and price move together; near 0 means weak relationship; near -1 means they move opposite.",
+          "Why it matters: Indicates whether flow is currently a dependable directional signal for decision-making.",
         ],
       },
     },
   ];
 
   const netFlowValue = model.kpis.netExchangeFlow1h.value;
-  const netFlowPct = model.kpis.netExchangeFlow1h.pct;
   const impactInsight = {
     signal: model.insight.summary,
     narrative: model.insight.detail,
     hasStats: false,
     netFlow: netFlowValue === null ? "n/a" : netFlowValue.toFixed(1),
-    deltaPct: netFlowPct === null ? "n/a" : `${Math.abs(netFlowPct).toFixed(1)}%`,
-    symbol:
-      netFlowValue === null ? ("■" as const) : netFlowValue >= 0 ? ("▲" as const) : ("▼" as const),
-    trend:
-      netFlowValue === null
-        ? ("neutral" as const)
-        : netFlowValue >= 0
-          ? ("positive" as const)
-          : ("negative" as const),
+    deltaPct: "n/a",
+    symbol: "■" as const,
+    trend: "neutral" as const,
   };
 
   return (
@@ -183,7 +175,11 @@ export function ImpactPage({ token }: ImpactPageProps) {
         </Collapsible>
       </div>
 
-      <InsightCard insight={impactInsight} statsLabel="Last 1h" suppressStatsFallback />
+      <InsightCard
+        insight={impactInsight}
+        statsLabel={model.range === "24h" ? "Last 24H" : "Last 7D"}
+        suppressStatsFallback
+      />
 
       <KpiRow cards={kpiCards} />
 

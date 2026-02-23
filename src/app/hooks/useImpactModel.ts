@@ -494,7 +494,6 @@ export function useImpactModel({ token }: UseImpactModelOptions): UseImpactModel
 
   const insight = useMemo(() => {
     const corr = kpis.flowReturnCorr24h.value;
-    const share = kpis.whaleShare.value;
     const net = kpis.netExchangeFlow1h.value;
     const whaleNet = kpis.whaleExchangeNetFlow1h.value;
     const vol = kpis.rollingVolatility24h.value;
@@ -515,21 +514,17 @@ export function useImpactModel({ token }: UseImpactModelOptions): UseImpactModel
     return {
       summary:
         corr === null
-          ? "Price is currently weakly coupled to flow."
+          ? "Flow-price link is weakly coupled."
           : corrStrong
             ? `Flow-price link is ${movementLabel(corr)} and actionable.`
             : "Flow-price link is present but not decisive.",
-      detail:
-        share === null
-          ? `${flowRegime}; ${volRegime}.`
-          : `${flowRegime}; whale participation is elevated while the market remains in a ${volRegime}.`,
+      detail: `${flowRegime.charAt(0).toUpperCase() + flowRegime.slice(1)}. Market is in a ${volRegime}.`,
     };
   }, [
     kpis.flowReturnCorr24h.value,
     kpis.netExchangeFlow1h.value,
     kpis.rollingVolatility24h.value,
     kpis.whaleExchangeNetFlow1h.value,
-    kpis.whaleShare.value,
   ]);
 
   return {

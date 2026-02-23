@@ -7,6 +7,7 @@ import { MonitorInsightCard } from "../components/MonitorInsightCard";
 import { NetworkGraph } from "../components/NetworkGraph";
 import { TransactionFeed } from "../components/TransactionFeed";
 import { LiveStatusBadge } from "../components/LiveStatusBadge";
+import { InfoHover } from "../components/InfoHover";
 import { Button } from "../components/ui/button";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "../components/ui/collapsible";
 import { useLiveTransactions, type LiveTransaction } from "../hooks/useLiveTransactions";
@@ -168,11 +169,35 @@ export function MonitorSection({
               <div className="h-full flex flex-col bg-card/60 backdrop-blur-sm border border-border/60 rounded-xl p-4">
                 <div className="flex items-center justify-between pb-3 border-b border-border/50">
                   <div>
-                    <h3 className="font-semibold text-base">
-                      {monitorModel.feedMode === "live"
-                        ? "Live Wallet Network Graph"
-                        : "24H Liquidity Flow Network Graph"}
-                    </h3>
+                    <div className="flex items-center gap-1.5">
+                      <h3 className="font-semibold text-base">
+                        {monitorModel.feedMode === "live"
+                          ? "Live Wallet Network Graph"
+                          : "24H Liquidity Flow Network Graph"}
+                      </h3>
+                      <InfoHover
+                        title={
+                          monitorModel.feedMode === "live"
+                            ? "Live Wallet Network Graph"
+                            : "24H Liquidity Flow Network Graph"
+                        }
+                        summary={
+                          monitorModel.feedMode === "live"
+                            ? "Visual map of recent wallet-to-wallet transfer relationships."
+                            : "Visual map of major exchange-linked liquidity connections in the latest 24H snapshot."
+                        }
+                        interpretation={
+                          monitorModel.feedMode === "live"
+                            ? "Larger or more connected nodes are likely key actors; clustered links can indicate concentrated activity."
+                            : "Dense links around exchanges or tiers suggest where liquidity is concentrating and which groups are driving flow."
+                        }
+                        significance={
+                          monitorModel.feedMode === "live"
+                            ? "Helps stakeholders quickly identify influential wallets and potential transmission paths of market activity."
+                            : "Helps stakeholders identify where exchange-facing liquidity pressure is concentrated and who is most exposed."
+                        }
+                      />
+                    </div>
                     <p className="text-xs text-muted-foreground">
                       {monitorModel.feedMode === "live"
                         ? "Node-edge view from current stream session"

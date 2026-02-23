@@ -2,6 +2,7 @@ import { useMemo, useState } from "react";
 import * as d3 from "d3";
 import { Card, CardContent, CardHeader, CardTitle } from "../ui/card";
 import { ImpactCexSeries } from "../../hooks/useImpactModel";
+import { InfoHover } from "../InfoHover";
 import {
   FALLBACK_H,
   FALLBACK_W,
@@ -77,7 +78,15 @@ export function CexFlowsChart({ series }: CexFlowsChartProps) {
   return (
     <Card className="bg-card/60 border-border/60 h-[380px] rounded-xl flex flex-col overflow-hidden">
       <CardHeader className="flex-row items-center justify-between space-y-0 !pt-4 !pb-2 border-b border-border/50 gap-3">
-        <CardTitle className="truncate leading-tight">Net Flow by Tier</CardTitle>
+        <div className="flex items-center gap-1.5">
+          <CardTitle className="truncate leading-tight">Net Flow by Tier</CardTitle>
+          <InfoHover
+            title="Net Flow by Tier"
+            summary="Breaks net exchange flow into wallet-size tiers (whale, shark, dolphin, shrimp)."
+            interpretation="Sustained movement led by one tier indicates who is driving current liquidity behavior."
+            significance="Supports stakeholder decisions by showing whether market pressure is broad-based or concentrated in specific participant groups."
+          />
+        </div>
       </CardHeader>
       <CardContent className="p-0 flex-1 min-h-0">
         <div className="h-full px-4 pb-4 flex flex-col min-h-0">

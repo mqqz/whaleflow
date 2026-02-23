@@ -8,6 +8,11 @@ export interface InsightCardData {
   deltaPct: string;
   symbol: "▲" | "▼" | "■";
   trend: "positive" | "negative" | "neutral";
+  highlights?: Array<{
+    label: string;
+    value: string;
+    trend: "positive" | "negative" | "neutral";
+  }>;
 }
 
 interface InsightCardProps {
@@ -37,6 +42,19 @@ export function InsightCard({
       </div>
       <p className="mt-1 text-sm font-semibold">{insight.signal}</p>
       <p className="mt-1 text-sm text-foreground/90">{insight.narrative}</p>
+      {insight.highlights && insight.highlights.length > 0 ? (
+        <div className="mt-2 flex flex-wrap items-center gap-2">
+          {insight.highlights.map((item) => (
+            <span
+              key={`${item.label}:${item.value}`}
+              className="inline-flex items-center gap-1 rounded-md border border-border/60 bg-background/35 px-2 py-1 text-[11px]"
+            >
+              <span className="text-muted-foreground">{item.label}</span>
+              <span className={trendClass(item.trend)}>{item.value}</span>
+            </span>
+          ))}
+        </div>
+      ) : null}
       {insight.hasStats ? (
         <p className="mt-1 text-[11px] text-muted-foreground">
           {statsLabel}: <span className={numberClass}>{insight.netFlow}</span> ETH

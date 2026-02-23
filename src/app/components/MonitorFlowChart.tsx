@@ -10,6 +10,7 @@ import {
   Area,
 } from "recharts";
 import { MonitorFeedMode } from "../hooks/useMonitorModel";
+import { InfoHover } from "./InfoHover";
 
 interface MonitorFlowChartProps {
   points: FlowPoint[];
@@ -85,7 +86,15 @@ export function MonitorFlowChart({
     <div className="h-full flex flex-col bg-card/60 backdrop-blur-sm border border-border/60 rounded-xl p-4">
       <div className="flex items-center justify-between pb-3 border-b border-border/50">
         <div>
-          <h3 className="font-semibold text-base">Exchange Liquidity Pressure</h3>
+          <div className="flex items-center gap-1.5">
+            <h3 className="font-semibold text-base">Exchange Liquidity Pressure</h3>
+            <InfoHover
+              title="Exchange Liquidity Pressure"
+              summary="Shows cumulative exchange inflow, outflow, and net flow over time."
+              interpretation="Rising net outflow can indicate accumulation behavior; rising net inflow can indicate potential sell-side pressure."
+              significance="Helps non-technical teams see whether exchange liquidity trends are supporting or pressuring price direction."
+            />
+          </div>
           <p className="text-xs text-muted-foreground">
             {isLiveMode
               ? "Cumulative inflow/outflow/net (rolling 5m window)"
