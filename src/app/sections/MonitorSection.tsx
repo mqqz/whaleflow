@@ -23,7 +23,6 @@ interface MonitorSectionProps {
   selectedWallet: string | null;
   status: ReturnType<typeof useLiveTransactions>["status"];
   transactions: LiveTransaction[];
-  visibleTransactions: LiveTransaction[];
   graphTransactions: LiveTransaction[];
   onMinAmountChange: (value: number) => void;
   onMaxVisibleChange: (value: number) => void;
@@ -48,7 +47,6 @@ export function MonitorSection({
   selectedWallet,
   status,
   transactions,
-  visibleTransactions,
   graphTransactions,
   onMinAmountChange,
   onMaxVisibleChange,
@@ -153,7 +151,7 @@ export function MonitorSection({
             </Collapsible>
           </div>
 
-          <MonitorInsightCard insight={monitorModel.insight} />
+          <MonitorInsightCard insight={monitorModel.insight} feedMode={monitorModel.feedMode} />
 
           <div style={{ height: `${MONITOR_TOP_HEIGHT}px` }}>
             {mainChartMode === "line" ? (
@@ -222,7 +220,8 @@ export function MonitorSection({
               network={network}
               token={token}
               minAmount={minAmount}
-              transactions={visibleTransactions}
+              transactions={transactions}
+              maxVisible={maxVisible}
               feedMode={monitorModel.feedMode}
               feedTitle={monitorModel.feedTitle}
               feedSubtitle={monitorModel.feedSubtitle}
@@ -252,7 +251,7 @@ export function MonitorSection({
           <RightSidebar
             token={token}
             selectedWallet={selectedWallet}
-            transactions={visibleTransactions}
+            transactions={transactions}
             feedMode={monitorModel.feedMode}
             edgePoints24h={monitorModel.edgePoints24h}
             onWalletSelect={onWalletSelect}

@@ -21,6 +21,7 @@ interface TransactionFeedProps {
   token: string;
   minAmount: number;
   transactions: LiveTransaction[];
+  maxVisible: number;
   feedMode: MonitorFeedMode;
   feedTitle: string;
   feedSubtitle: string;
@@ -96,6 +97,7 @@ export function TransactionFeed({
   token,
   minAmount,
   transactions,
+  maxVisible,
   feedMode,
   feedTitle,
   feedSubtitle,
@@ -112,6 +114,7 @@ export function TransactionFeed({
 }: TransactionFeedProps) {
   const upperNetwork = network.toUpperCase();
   const tokenLabel = tokenLabels[token] ?? token.toUpperCase();
+  const visibleTransactions = transactions.slice(0, maxVisible);
 
   return (
     <div className="bg-card/60 backdrop-blur-sm border border-border/60 rounded-xl min-h-[calc(100dvh-4rem-420px-1.5rem)]">
@@ -297,7 +300,7 @@ export function TransactionFeed({
                   ))}
                 </AnimatePresence>
               )
-            ) : transactions.length === 0 ? (
+            ) : visibleTransactions.length === 0 ? (
               <div className="min-h-[220px] flex items-center justify-center">
                 <div className="text-sm text-muted-foreground text-center">
                   {pauseStream ? (
@@ -318,7 +321,7 @@ export function TransactionFeed({
               </div>
             ) : (
               <AnimatePresence mode="popLayout">
-                {transactions.map((tx) => (
+                {visibleTransactions.map((tx) => (
                   <motion.div
                     key={tx.id}
                     initial={{ x: 100, opacity: 0 }}

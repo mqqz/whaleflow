@@ -58,10 +58,6 @@ export default function App() {
     paused: pauseStream,
     flushIntervalMs: slowMode ? 1400 : 800,
   });
-  const visibleTransactions = useMemo(
-    () => transactions.slice(0, maxVisible),
-    [transactions, maxVisible],
-  );
   const graphTransactions = useMemo(
     () => transactions.filter((tx) => tx.channel === "wallet"),
     [transactions],
@@ -94,7 +90,6 @@ export default function App() {
             selectedWallet={selectedWallet}
             status={status}
             transactions={transactions}
-            visibleTransactions={visibleTransactions}
             graphTransactions={graphTransactions}
             onMinAmountChange={setMinAmount}
             onMaxVisibleChange={setMaxVisible}

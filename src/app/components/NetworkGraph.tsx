@@ -169,8 +169,16 @@ const buildGraphData = (transactions: LiveTransaction[]) => {
       type: link.netVolume >= 0 ? "inflow" : "outflow",
     }));
 
+  const linkedNodeIds = new Set<string>();
+  for (const link of sortedLinks) {
+    linkedNodeIds.add(link.source);
+    linkedNodeIds.add(link.target);
+  }
+  const connectedNodes =
+    sortedLinks.length === 0 ? [] : sortedNodes.filter((node) => linkedNodeIds.has(node.id));
+
   return {
-    nodes: sortedNodes,
+    nodes: connectedNodes,
     links: sortedLinks,
   };
 };
@@ -268,8 +276,16 @@ const buildGraphDataFromEdges = (edges: EdgePoint[]) => {
       type: link.netVolume >= 0 ? "inflow" : "outflow",
     }));
 
+  const linkedNodeIds = new Set<string>();
+  for (const link of sortedLinks) {
+    linkedNodeIds.add(link.source);
+    linkedNodeIds.add(link.target);
+  }
+  const connectedNodes =
+    sortedLinks.length === 0 ? [] : sortedNodes.filter((node) => linkedNodeIds.has(node.id));
+
   return {
-    nodes: sortedNodes,
+    nodes: connectedNodes,
     links: sortedLinks,
   };
 };

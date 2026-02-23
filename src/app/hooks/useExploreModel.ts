@@ -351,11 +351,11 @@ export function useExploreModel({
 
   const graphTitle = hasDuneWalletEdges ? "Exchange-Centric Network (24H)" : "Ego Network Graph";
   const graphCaption = hasDuneWalletEdges
-    ? "Filtered from Dune 24H top-500 exchange edges for the selected wallet."
+    ? "Filtered from 24H exchange-edge snapshot for the selected wallet."
     : analyticsLoading && token.toLowerCase() === "eth"
-      ? "Loading Dune 24H edge data..."
+      ? "Loading 24H exchange-edge snapshot..."
       : token.toLowerCase() === "eth" && normalizedWallet
-        ? "No qualifying edges in Dune top-500 set. Showing 1-2 hop fallback from wallet-channel transactions."
+        ? "No qualifying edges in 24H exchange-edge snapshot. Showing 1-2 hop fallback from wallet-channel transactions."
         : "Constrained to this wallet's 1-2 hop neighborhood from the last 450 wallet-channel transactions.";
 
   const selectWallet = useCallback(
